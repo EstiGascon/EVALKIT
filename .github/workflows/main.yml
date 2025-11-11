@@ -1,0 +1,55 @@
+name: Code Quality Checks
+on:
+  push:
+    branches: [ "**" ]
+    tags-ignore: [ "*" ]
+  pull_request:
+    branches: [ main ]
+jobs:
+  code-quality:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install system dependencies
+      run: sudo apt-get update -qy && sudo apt-get install -y build-essential
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: 2.1.2
+        virtualenvs-in-project: true
+        virtualenvs-path: ./.cache/pypoetry
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          .cache/pypoetry
+          .venv
+        key: poetry-${{ hashFiles('poetry.lock') }}
+    - name: Install dependencies
+      run: poetry install --only dev
+    - name: Run formatter (ruff format)
+      run: poetry run ruff format --check .
+    - name: Run linter (ruff check)
+      run: |
+        poetry run ruff check . --format github \
+        | tee ruff-report.json
+       
+    - name: Upload code quality report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: ruff-code-quality-report
+        path: ruff-report.json
+    - name: Check poetry lockfile
+      run: poetry check --lock --strict
+    # Skip for release commits and tags
+    - name: Skip for releases
+      if: |
+        startsWith(github.event.head_commit.message, 'chore(release):') ||
+        startsWith(github.ref, 'refs/tags/')
+      run: exit 1
