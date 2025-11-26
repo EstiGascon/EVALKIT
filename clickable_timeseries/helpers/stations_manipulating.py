@@ -180,7 +180,17 @@ class GeoDataProcessor:
 
     @staticmethod
     def get_geo_files(folder_path):
-        """Get all geo files from the specified folder."""
+        """
+        Search folder_path for files with '_obs_' in the filename and '.geo' extension,
+        returning a sorted list of matching file paths.
+
+        Args:
+            folder_path (str or Path): Directory to search.
+
+        Returns:
+            list[str]: Sorted list of geo file paths.
+        """
+
         geo_files = glob.glob(str(Path(folder_path) / "*_obs_*.geo"))
         geo_files.sort()
         return geo_files
@@ -243,7 +253,15 @@ class StationCreator:
         return gdf
 
     def create_station_info_df(self, station_metadata):
-        """Convert station metadata to DataFrame."""
+        """
+        Convert station metadata dictionary to a pandas DataFrame.
+
+        Args:
+            station_metadata (dict): Dictionary containing station metadata with station IDs as keys.
+
+        Returns:
+            pandas.DataFrame: DataFrame with metadata fields as columns.
+        """
         metadata_df = pd.DataFrame.from_dict(station_metadata, orient="index")
         metadata_df.index.name = "stnid"
         return metadata_df

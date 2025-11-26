@@ -7,15 +7,22 @@ import pandas as pd
 
 
 class TemperatureProcessor:
-    """Processor for temperature calculations with daily maximum and minimum over 24-hour periods."""
+    """Processor for temperature calculations, including hourly data and 24-hour daily extremes."""
 
     def __init__(self):
-        """Initialize the temperature processor retriever."""
+        """Initialize the temperature processor with empty datasets and intervals."""
         self.processed_datasets = {}
         self.available_intervals = {}
 
     def process_temperature_datasets(self, all_datasets: dict[str, Any]) -> bool:
-        """Process datasets to calculate temperature with daily max/min."""
+        """Process multiple model datasets to extract temperature and calculate daily extremes.
+
+        Args:
+            all_datasets: Dictionary of model datasets keyed by model name.
+
+        Returns:
+            True if any datasets were successfully processed, False otherwise.
+        """
         try:
             self.processed_datasets = {}
             self.available_intervals = {}
@@ -78,7 +85,14 @@ class TemperatureProcessor:
             return False
 
     def _get_available_temperature_params(self, dataset) -> list[str]:
-        """Check which temperature parameters are available in the dataset."""
+        """Identify which temperature parameters are available in the dataset.
+
+        Args:
+            dataset: Model dataset object.
+
+        Returns:
+            List of available temperature parameters (subset of ["2t", "2d"]).
+        """
         available_params = []
 
         for param in ["2t", "2d"]:
@@ -92,7 +106,16 @@ class TemperatureProcessor:
         return available_params
 
     def _extract_temperature_data(self, dataset, model_name: str, temp_param: str):
-        """Extract temperature data from dataset."""
+        """Extract sub-daily temperature data from a dataset for a given parameter.
+
+        Args:
+            dataset: Model dataset object.
+            model_name: Name of the model.
+            temp_param: Temperature parameter name ("2t" or "2d").
+
+        Returns:
+            Dictionary with "records" list, or None if no valid data is found.
+        """
         try:
             temp_fields = dataset.sel(param=temp_param)
 
@@ -142,7 +165,14 @@ class TemperatureProcessor:
             return None
 
     def _extract_time_info(self, field):
-        """Extract time information from field."""
+        """Extract time-related metadata from a temperature field.
+
+        Args:
+            field: Temperature field object.
+
+        Returns:
+            Dictionary with time-related keys and their values (may include step, valid_time, etc.).
+        """
         try:
             metadata = field.metadata()
             time_info = {}
@@ -175,7 +205,14 @@ class TemperatureProcessor:
             return {}
 
     def _extract_coordinate_info(self, field):
-        """Extract coordinate information from field."""
+        """Extract coordinate metadata from a temperature field.
+
+        Args:
+            field: Temperature field object.
+
+        Returns:
+            Dictionary with coordinate keys and their values, including grid and geolocation info.
+        """
         try:
             metadata = field.metadata()
 
@@ -213,7 +250,26 @@ class TemperatureProcessor:
     def _calculate_daily_extremes(  # noqa: PLR0912, PLR0915
         self, temp_data, model_name: str, temp_param: str, extreme_type: str
     ):
-        """Calculate daily maximum or minimum with proper handling of data frequency and CORRECT datetime."""
+        """Calculate daily maximum or minimum temperature from sub-daily records.
+
+        Groups sub-daily temperature records into daily windows and calculates either
+        the daily maximum or minimum. The resulting records include proper steps and
+        a valid datetime corresponding to the aggregated day.
+
+        Args:
+            temp_data: Dictionary containing temperature data with "records" key
+            model_name: Name of the model
+            temp_param: Temperature parameter name (e.g., '2t')
+            extreme_type: Type of daily extreme to calculate ("max" or "min")
+
+        Returns:
+            Dictionary with aggregated daily extreme records:
+                - "records": list of daily extreme records
+                - "model": model name
+                - "param": parameter name with aggregation suffix
+                - "aggregation": aggregation type (e.g., "24h_max" or "24h_min")
+            Returns None if input data is missing or no valid daily extremes can be calculated.
+        """
         try:
             if not temp_data or "records" not in temp_data:
                 return None
@@ -334,7 +390,22 @@ class TemperatureProcessor:
             return None
 
     def _extract_base_datetime_from_records(self, records):
-        """Extract base date and time from temperature records."""
+        """Extract base date and time from a list of temperature records.
+
+        Tries multiple locations in the record for date and time information:
+        - `metadata` dictionary
+        - `time` dictionary
+        - `valid_time` field converted to date and time
+        Falls back to the current date with time=0 if extraction fails.
+
+        Args:
+            records: List of record dictionaries containing temperature data
+
+        Returns:
+            Tuple of (date, time):
+                - date: Integer in YYYYMMDD format
+                - time: Integer in HHMM format (0 if fallback used)
+        """
         try:
             if records and len(records) > 0:
                 first_record = records[0]
@@ -372,7 +443,17 @@ class TemperatureProcessor:
             return date, time
 
     def _create_proper_datetime_for_step(self, step_hours, base_date, base_time):
-        """Create proper datetime for a given step using base date/time."""
+        """Create a proper datetime for a forecast step using a base date and time.
+
+        Args:
+            step_hours: Number of hours to add to the base datetime
+            base_date: Base date (int, str, or datetime-like). If None, defaults to today.
+            base_time: Base time (int, str, or datetime-like). If None, defaults to 00:00
+
+        Returns:
+            pandas Timestamp representing the datetime corresponding to the given step.
+            Falls back to current datetime plus step_hours if an error occurs.
+        """
         try:
             if base_date is None or base_time is None:
                 base_datetime = pd.Timestamp.now().replace(
@@ -408,15 +489,20 @@ class TemperatureProcessor:
         base_param: str,
         interval: str = "hourly",
     ) -> tuple[pd.DataFrame, float]:
-        """Extract temperature timeseries using simple approach like wind speed processor.
+        """Extract temperature timeseries at a specific location using simple nearest-grid approach.
 
         Args:
             model_name: Name of the model
-            lat: Latitude
-            lon: Longitude
+            lat: Latitude of target location
+            lon: Longitude of target location
             base_param: Base parameter ('2t' or '2d')
             interval: Interval type ('hourly', '24h_max', '24h_min')
 
+        Returns:
+            Tuple containing:
+                - Pandas DataFrame with index 'time' and column 'forecast_value', or None if no data
+                - Average distance in kilometers from target location to the nearest grid points
+                used for extraction (0.0 if no data)
         """
         try:
             if interval == "hourly":
@@ -471,7 +557,29 @@ class TemperatureProcessor:
             return None, 0.0
 
     def _extract_nearest_value(self, values, coordinates, target_lat, target_lon):
-        """Extract value at nearest grid point using proper spatial interpolation."""
+        """Extract the value at the nearest grid point to a target location.
+
+        Performs a simple nearest-grid-point extraction using the grid metadata.
+        Falls back to the center value if coordinates are missing or an error occurs.
+
+        Args:
+            values: Numpy array or similar containing the grid values
+            coordinates: Dictionary with grid metadata including:
+                - 'latitudeOfFirstGridPointInDegrees'
+                - 'longitudeOfFirstGridPointInDegrees'
+                - 'latitudeOfLastGridPointInDegrees'
+                - 'longitudeOfLastGridPointInDegrees'
+                - 'Ni': number of points in longitude direction
+                - 'Nj': number of points in latitude direction
+            target_lat: Latitude of target location
+            target_lon: Longitude of target location
+
+        Returns:
+            Tuple containing:
+                extracted_value: Float value at nearest grid point (or center fallback)
+                distance_km: Distance in kilometers from target location to extracted point
+                            (0.0 if fallback was used or error occurred)
+        """
         try:
             lat_first = coordinates.get("latitudeOfFirstGridPointInDegrees")
             lon_first = coordinates.get("longitudeOfFirstGridPointInDegrees")
@@ -542,7 +650,17 @@ class TemperatureProcessor:
                 return float(values[middle_i, middle_j]), 0.0
 
     def _calculate_distance(self, lat1, lon1, lat2, lon2):
-        """Calculate distance between two points in kilometers."""
+        """Calculate the great-circle distance between two geographic points.
+
+        Args:
+            lat1: Latitude of the first point in degrees
+            lon1: Longitude of the first point in degrees
+            lat2: Latitude of the second point in degrees
+            lon2: Longitude of the second point in degrees
+
+        Returns:
+            Distance between the two points in kilometers. Returns 0.0 if an error occurs.
+        """
         try:
             lat1_rad = math.radians(lat1)
             lon1_rad = math.radians(lon1)
@@ -565,7 +683,15 @@ class TemperatureProcessor:
             return 0.0
 
     def _create_time_index(self, time_info):
-        """Create pandas time index from time info."""
+        """Create a pandas Timestamp or DatetimeIndex from provided time information.
+
+        Args:
+            time_info: Dictionary containing either 'valid_time' or 'step' key
+
+        Returns:
+            pandas Timestamp or DatetimeIndex representing the time. If neither key is present
+            or an error occurs, returns the current timestamp.
+        """
         try:
             if "valid_time" in time_info:
                 return pd.to_datetime(time_info["valid_time"])
@@ -580,7 +706,16 @@ class TemperatureProcessor:
             return pd.Timestamp.now()
 
     def _extract_base_datetime_from_field(self, field):
-        """Extract base date and time from temperature field metadata."""
+        """Extract base date and time from a temperature field's metadata.
+
+        Args:
+            field: Dataset field object containing metadata
+
+        Returns:
+            Tuple containing:
+                date: Base date extracted from metadata, or None if unavailable
+                time: Base time extracted from metadata, or None if unavailable
+        """
         try:
             metadata = field.metadata()
 

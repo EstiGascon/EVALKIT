@@ -10,7 +10,13 @@ class BoundingBoxManager:
     """Class for managing bounding box operations and storage."""
 
     def __init__(self):
-        """Initialize the BoundingBoxManager with empty state."""
+        """Initialize the BoundingBoxManager with empty state.
+
+        Attributes:
+            current_bbox: Current bounding box coordinates as a tuple (west, south, east, north)
+            saved_bboxes: List of previously saved bounding boxes
+            current_bbox_params: Dictionary containing current bounding box parameters
+        """
         self.current_bbox = None
         self.saved_bboxes = []
         self.current_bbox_params = {}
@@ -18,7 +24,16 @@ class BoundingBoxManager:
     def set_current_bbox(
         self, bounds: tuple[float, float, float, float], num_stations: int = 0
     ):
-        """Set the current bounding box with additional parameters."""
+        """Set the current bounding box and store additional parameters.
+
+        Args:
+            bounds: Tuple of (west, south, east, north) coordinates
+            num_stations: Optional number of stations within the bounding box (default: 0)
+
+        Updates:
+            current_bbox: Stores the bounding box coordinates
+            current_bbox_params: Dictionary containing bounding box info including width, height, timestamp, and station count
+        """
         min_lon, min_lat, max_lon, max_lat = bounds
         self.current_bbox = bounds
         self.current_bbox_params = {
@@ -34,11 +49,19 @@ class BoundingBoxManager:
         }
 
     def get_current_bbox(self) -> tuple[float, float, float, float] | None:
-        """Get the current bounding box coordinates."""
+        """Get the current bounding box coordinates.
+
+        Returns:
+            Tuple of (west, south, east, north) if a bounding box is set, otherwise None
+        """
         return self.current_bbox
 
     def get_current_bbox_params(self) -> dict | None:
-        """Get the current bounding box with all parameters."""
+        """Get all parameters of the current bounding box.
+
+        Returns:
+            Dictionary containing bounding box parameters including coordinates, width, height, timestamp, and station count, or None if no bounding box is set
+        """
         return self.current_bbox_params.copy() if self.current_bbox_params else None
 
 
@@ -54,10 +77,9 @@ class ForecastDataLoader:
         """Initialize the ForecastDataLoader.
 
         Args:
-            source (str): Data source ("mars" for Mars Archive, "file" for local files)
-            bbox_manager (BoundingBoxManager): Optional bounding box manager instance
+            source: Data source ("mars" for Mars Archive, "file" for local files)
+            bbox_manager: Optional bounding box manager instance
             **kwargs: Additional configuration parameters
-
         """
         self.source = source
         self.config = kwargs
@@ -66,7 +88,7 @@ class ForecastDataLoader:
         self.bbox_manager = bbox_manager or BoundingBoxManager()
         self.config_manager = ConfigurationManager()
 
-    def retrieve_data_by_date_range(  # noqa: PLR0913
+    def retrieve_data_by_date_range(
         self,
         param: list[str],
         start_date: datetime.date,
@@ -80,16 +102,37 @@ class ForecastDataLoader:
         use_bbox: bool = True,
         custom_area: list[float] | None = None,
         custom_steps: list[int] | None = None,
-    ) -> dict[str, Any]:
-        """Retrieve meteorological data from Mars Archive based on date range."""
-        if end_date < start_date:
-            raise ValueError("End date must be after or equal to start date")
+    ) -> dict[str, Any] | None:
+        """Retrieve meteorological data from Mars Archive based on date range.
 
-        # Get area
+        Args:
+            param: List of parameter short names
+            start_date: Start date for forecast
+            end_date: End date for forecast
+            time: Forecast time (default: "00:00:00")
+            model: Model name (default: "aifs-single")
+            stream: Optional data stream
+            type: Optional forecast type
+            levtype: Optional level type
+            grid: Optional grid specification
+            use_bbox: Use bounding box from manager if True
+            custom_area: Optional custom area coordinates [north, west, south, east]
+            custom_steps: Optional list of custom forecast steps
+
+        Returns:
+            Dictionary with keys: 'dataset', 'metadata', 'model_key', or None if no valid parameters
+        """
+        if end_date < start_date:
+            print("⚠️  End date is before start date. Returning None.")
+            return None
+
         if custom_area:
             area = custom_area
         elif use_bbox:
             area = self._get_area_from_bbox_manager()
+            if not area:
+                print("⚠️  No bounding box available, returning None.")
+                return None
         else:
             default_bbox = self.config_manager.get_default_bbox()
             area = [
@@ -99,23 +142,12 @@ class ForecastDataLoader:
                 default_bbox["east"],
             ]
 
-        date_str = start_date.strftime("%Y-%m-%d")
-
-        # Filter parameters based on model availability
         filtered_param = self._filter_params_for_model(param, model)
-
         if not filtered_param:
-            raise ValueError(
-                f"No valid parameters remaining after filtering for {model} model capabilities"
-            )
+            print(f"⚠️  No valid parameters for model '{model}'. Returning None.")
+            return None
 
-        # Get model configuration from config
-        try:
-            model_info = self.config_manager.get_model_info(model)
-        except ValueError as e:
-            raise ValueError(f"Model '{model}' not found in configuration") from e
-
-        # Use config values unless explicitly overridden
+        model_info = self.config_manager.get_model_info(model) or {}
         stream = stream or model_info.get("stream", "oper")
         type = type or model_info.get("type", "fc")
         levtype = levtype or model_info.get("levtype", "sfc")
@@ -131,7 +163,7 @@ class ForecastDataLoader:
             levtype,
             area,
             grid,
-            date_str,
+            start_date.strftime("%Y-%m-%d"),
             custom_steps,
         )
 
@@ -139,38 +171,34 @@ class ForecastDataLoader:
         """Filter parameters based on model availability.
 
         Args:
-            param: List of parameter names to filter
-            model: Model name (e.g., 'aifs-single', 'ifs-single')
+            param: List of parameter names
+            model: Model name
 
         Returns:
-            Filtered list of parameters available for the model
-
+            List of parameter short names that are available for the model
         """
         filtered = []
         unavailable = []
 
         for p in param:
-            try:
-                param_info = self.config_manager.get_param_info(p)
-                available_models = param_info.get("available_models", [])
-
+            info = self.config_manager.get_param_info(p)
+            if info:
+                available_models = info.get("available_models", [])
                 if not available_models or model in available_models:
                     filtered.append(p)
                 else:
                     unavailable.append(p)
-            except ValueError:
+            else:
                 filtered.append(p)
 
         if unavailable:
-            print(
-                f"ℹ️  Skipping {unavailable} for {model} (not available in this model)"
-            )
+            print(f"ℹ️  Skipping {unavailable} for {model} (not available).")
             if filtered:
                 print(f"   Retrieving: {filtered}")
 
         return filtered
 
-    def _retrieve_single_request(  # noqa: PLR0913
+    def _retrieve_single_request(
         self,
         param: list[str],
         start_date: datetime.date,
@@ -184,33 +212,40 @@ class ForecastDataLoader:
         grid: list[float] | None,
         date_str: str,
         custom_steps: list[int] | None = None,
-    ) -> dict[str, Any]:
-        """Handle single request."""
+    ) -> dict[str, Any] | None:
+        """Handle single request to Mars Archive.
+
+        Args:
+            param: List of parameter short names
+            start_date: Start date
+            end_date: End date
+            time: Forecast time
+            model: Model name
+            stream: Data stream
+            type: Forecast type
+            levtype: Level type
+            area: Area coordinates
+            grid: Optional grid
+            date_str: Date string for request
+            custom_steps: Optional custom steps
+
+        Returns:
+            Dictionary with keys 'dataset', 'metadata', 'model_key' or None if request fails
+        """
         param_ids = self.config_manager.get_param_ids(param)
-        print(f"Converting parameters {param} to IDs {param_ids}")
-
-        # Get class from config instead of hardcoding
         class_model = self.config_manager.get_model_class(model)
-        print(f"Using MARS class '{class_model}' for model '{model}'")
 
-        # Calculate or expand steps
         if custom_steps:
-            # Check if model supports custom step expansion
             if self.config_manager.supports_custom_step_expansion(model):
                 steps_to_download = self._expand_custom_steps(
                     custom_steps, model, start_date
                 )
-                print(
-                    f"{model}: Expanded custom steps {custom_steps} to {steps_to_download}"
-                )
             else:
                 steps_to_download = custom_steps.copy()
-                print(f"{model}: Using exact custom steps: {steps_to_download}")
         else:
             steps_to_download = self._calculate_steps_from_date_range(
                 start_date, end_date, time, model
             )
-            print(f"Using calculated steps: {steps_to_download}")
 
         request_params = {
             "param": param_ids,
@@ -223,15 +258,11 @@ class ForecastDataLoader:
             "levtype": levtype,
             "area": area,
         }
-
-        if grid is not None:
+        if grid:
             request_params["grid"] = grid
 
         try:
-            print(f"Making MARS request with param IDs: {param_ids}")
-            print(f"Model config: class={class_model}, stream={stream}, type={type}")
             ds = ekd.from_source("mars", **request_params)
-
             model_key = f"{model}_{start_date.strftime('%Y%m%d')}"
             metadata = {
                 "param": param,
@@ -253,9 +284,7 @@ class ForecastDataLoader:
                 "custom_steps": custom_steps,
                 "retrieval_timestamp": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "bbox_info": self.bbox_manager.get_current_bbox_params(),
-                "split_requests": False,
             }
-
             if hasattr(ds, "metadata"):
                 metadata["datetime_values"] = ds.metadata("valid_datetime")
             if hasattr(ds, "to_latlon"):
@@ -265,13 +294,9 @@ class ForecastDataLoader:
             self.loaded_datasets[model_key] = ds
 
             return {"dataset": ds, "metadata": metadata, "model_key": model_key}
-
         except Exception as e:
-            error_msg = f"Error retrieving data from Mars Archive: {str(e)}"
-            print("❌ MARS Request failed!")
-            print(f"   Error: {error_msg}")
-            print(f"   Request params: {request_params}")
-            raise RuntimeError(error_msg) from e
+            print(f"❌ MARS request failed: {e}")
+            return None
 
     def _calculate_steps_from_date_range(
         self,
@@ -286,11 +311,10 @@ class ForecastDataLoader:
             start_date: Forecast start date
             end_date: Forecast end date
             start_time: Forecast start time
-            model: Model name to determine step intervals
+            model: Model name
 
         Returns:
-            List of forecast steps in hours
-
+            List of forecast steps in hours (empty if end < start)
         """
         start_datetime = datetime.datetime.combine(
             start_date, datetime.time.fromisoformat(start_time)
@@ -299,13 +323,9 @@ class ForecastDataLoader:
             end_date + datetime.timedelta(days=1),
             datetime.time.fromisoformat(start_time),
         )
-
         total_hours = int((end_datetime - start_datetime).total_seconds() / 3600)
-
         if total_hours <= 0:
-            raise ValueError("End date must be after start date")
-
-        # Use config manager to generate steps
+            return []
         return self.config_manager.generate_steps(0, total_hours, model, start_date)
 
     def _expand_custom_steps(
@@ -316,50 +336,43 @@ class ForecastDataLoader:
         Args:
             custom_steps: List of user-selected steps
             model: Model name
-            forecast_date: Forecast date for date-based patterns
+            forecast_date: Forecast date
 
         Returns:
-            Expanded list of steps following model's pattern
-
+            Expanded list of steps
         """
         if not custom_steps:
-            return custom_steps
-
-        min_step = min(custom_steps)
-        max_step = max(custom_steps)
-
-        expanded_steps = self.config_manager.generate_steps(
-            min_step, max_step, model, forecast_date
+            return []
+        return self.config_manager.generate_steps(
+            min(custom_steps), max(custom_steps), model, forecast_date
         )
 
-        return expanded_steps
-
-    def _get_area_from_bbox_manager(self) -> list[float]:
+    def _get_area_from_bbox_manager(self) -> list[float] | None:
         """Get area coordinates from the bounding box manager.
 
         Returns:
-            List[float]: Area coordinates in Mars Archive format [north, west, south, east]
-
-        Raises:
-            ValueError: If no bounding box is set
-
+            List of coordinates [north, west, south, east] or None if no bbox is set
         """
         bbox = self.bbox_manager.get_current_bbox()
-        if bbox is not None:
+        if bbox:
             min_lon, min_lat, max_lon, max_lat = bbox
             return [max_lat, min_lon, min_lat, max_lon]
-        else:
-            raise ValueError(
-                "No bounding box set in bbox_manager. Please set a bounding box using "
-                "set_bounding_box() method or provide custom_area parameter."
-            )
+        return None
 
     def get_dataset(self, model_key: str) -> Any | None:
-        """Get loaded dataset for a specific model key."""
+        """Get loaded dataset for a specific model key.
+
+        Returns:
+            Dataset object or None if not loaded
+        """
         return self.loaded_datasets.get(model_key)
 
     def get_all_datasets(self) -> dict[str, Any]:
-        """Get all loaded datasets."""
+        """Get all loaded datasets.
+
+        Returns:
+            Copy of loaded datasets dictionary
+        """
         return self.loaded_datasets.copy()
 
     def load_grib_file(
@@ -369,15 +382,14 @@ class ForecastDataLoader:
 
         Args:
             grib_file_path: Path to GRIB file
-            model: Model name (optional, will auto-detect if None)
+            model: Optional model name
 
         Returns:
-            earthkit-data dataset object or None if failed
-
+            Dataset object or None if loading fails
         """
         try:
-            print(f"Loading GRIB file: {grib_file_path}")
             ds = ekd.from_source("file", grib_file_path)
             return ds
         except Exception as e:
-            raise RuntimeError(f"Failed to load Source file {grib_file_path}: {str(e)}")
+            print(f"❌ Failed to load GRIB file {grib_file_path}: {e}")
+            return None
