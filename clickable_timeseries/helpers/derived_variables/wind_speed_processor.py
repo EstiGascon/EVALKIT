@@ -15,7 +15,15 @@ class WindSpeedProcessor:
         self.available_intervals = {}
 
     def process_wind_speed_datasets(self, all_datasets: dict[str, Any]) -> bool:
-        """Process datasets to calculate wind speed with daily means."""
+        """Process all wind speed datasets to compute hourly values and daily means.
+
+        Args:
+            all_datasets (dict[str, Any]): Dictionary mapping model names to dataset objects.
+
+        Returns:
+            bool: True if at least one dataset was successfully processed, otherwise False.
+        """
+
         try:
             self.processed_datasets = {}
             self.available_intervals = {}
@@ -59,7 +67,15 @@ class WindSpeedProcessor:
             return False
 
     def _has_wind_components(self, dataset) -> bool:
-        """Check if dataset has required wind components."""
+        """Check whether the dataset contains the required wind component parameters (10u, 10v).
+
+        Args:
+            dataset: Input dataset to inspect.
+
+        Returns:
+            bool: True if both 10u and 10v components exist, otherwise False.
+        """
+
         try:
             u_fields = dataset.sel(param="10u")
             v_fields = dataset.sel(param="10v")
@@ -68,7 +84,17 @@ class WindSpeedProcessor:
             return False
 
     def _calculate_wind_speed_arrays(self, dataset, model_name: str):
-        """Calculate wind speed arrays from U and V components."""
+        """Calculate wind speed arrays from U and V wind components.
+
+        Args:
+            dataset: Dataset containing 10u and 10v fields.
+            model_name (str): Name of the model for logging and metadata.
+
+        Returns:
+            dict or None: Structured dictionary containing processed wind speed records,
+            or None if processing fails.
+        """
+
         try:
             u_fields = dataset.sel(param="10u")
             v_fields = dataset.sel(param="10v")
@@ -119,7 +145,15 @@ class WindSpeedProcessor:
             return None
 
     def _extract_time_info(self, field):
-        """Extract time information from field with reduced branching."""
+        """Extract time-related metadata from a dataset field.
+
+        Args:
+            field: Dataset field containing metadata with temporal information.
+
+        Returns:
+            dict: Dictionary of extracted time metadata fields.
+        """
+
         try:
             metadata = field.metadata()
             time_info = {}
@@ -152,7 +186,15 @@ class WindSpeedProcessor:
             return {}
 
     def _extract_coordinate_info(self, field):
-        """Extract coordinate information from field."""
+        """Extract spatial coordinate information from a dataset field.
+
+        Args:
+            field: Dataset field containing geospatial metadata.
+
+        Returns:
+            dict: Dictionary of extracted coordinate metadata.
+        """
+
         try:
             metadata = field.metadata()
 
@@ -188,7 +230,17 @@ class WindSpeedProcessor:
             return {}
 
     def _calculate_daily_means(self, wind_speed_data, model_name: str):
-        """Calculate daily means from hourly wind speed data with reduced branching."""
+        """Compute daily mean wind speed from hourly wind speed records.
+
+        Args:
+            wind_speed_data (dict): Dictionary containing hourly wind speed records.
+            model_name (str): Name of the associated model.
+
+        Returns:
+            dict or None: Dictionary containing daily mean wind speed records,
+            or None if computation fails.
+        """
+
         try:
             if not wind_speed_data or "records" not in wind_speed_data:
                 return None
@@ -252,7 +304,19 @@ class WindSpeedProcessor:
     def extract_wind_speed_timeseries(
         self, model_name: str, lat: float, lon: float, interval: str = "hourly"
     ) -> tuple[pd.DataFrame, float]:
-        """Extract wind speed timeseries at specific location."""
+        """Extract a wind speed time series for a specific latitude and longitude.
+
+        Args:
+            model_name (str): Name of the model.
+            lat (float): Latitude of the target location.
+            lon (float): Longitude of the target location.
+            interval (str): Time interval to extract ("hourly" or "daily_mean").
+
+        Returns:
+            tuple[pd.DataFrame, float]: DataFrame indexed by datetime containing forecast values,
+            and the average distance (km) from the target location to the nearest grid point.
+        """
+
         try:
             if interval == "daily_mean":
                 dataset_key = f"{model_name}_10ff_daily"
@@ -307,7 +371,17 @@ class WindSpeedProcessor:
             return None, 0.0
 
     def _extract_nearest_value(self, values, coordinates, target_lat, target_lon):
-        """Extract value at nearest grid point using proper spatial interpolation, with reduced branching."""
+        """Extract the nearest available wind speed value to a given geographic point.
+
+        Args:
+            values (np.ndarray): Array of wind speed values.
+            coordinates (dict): Coordinate metadata describing the grid.
+            target_lat (float): Target latitude.
+            target_lon (float): Target longitude.
+
+        Returns:
+            tuple[float, float]: Extracted value and distance (km) to the nearest grid point.
+        """
         try:
             lat_first = coordinates.get("latitudeOfFirstGridPointInDegrees")
             lon_first = coordinates.get("longitudeOfFirstGridPointInDegrees")
@@ -380,7 +454,18 @@ class WindSpeedProcessor:
                 return float(values[middle_i, middle_j]), 0.0
 
     def _calculate_distance(self, lat1, lon1, lat2, lon2):
-        """Calculate distance between two points in kilometers."""
+        """Calculate the great-circle distance between two geographic points.
+
+        Args:
+            lat1 (float): Latitude of the first point.
+            lon1 (float): Longitude of the first point.
+            lat2 (float): Latitude of the second point.
+            lon2 (float): Longitude of the second point.
+
+        Returns:
+            float: Distance between the points in kilometers.
+        """
+
         try:
             lat1_rad = math.radians(lat1)
             lon1_rad = math.radians(lon1)
@@ -403,7 +488,15 @@ class WindSpeedProcessor:
             return 0.0
 
     def _create_time_index(self, time_info):
-        """Create pandas time index from time info."""
+        """Create a pandas Timestamp from available time metadata.
+
+        Args:
+            time_info (dict): Dictionary of extracted time metadata.
+
+        Returns:
+            pd.Timestamp: Parsed timestamp representing the forecast valid time.
+        """
+
         try:
             if "valid_time" in time_info:
                 return pd.to_datetime(time_info["valid_time"])

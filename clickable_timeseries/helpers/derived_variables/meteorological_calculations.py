@@ -207,7 +207,7 @@ def _extract_base_datetime(data_ds: Any, xr_ds: Any = None) -> tuple[Any, Any]: 
             try:
                 xr_ds = data_ds.to_xarray()
             except Exception as e:
-                print(f"⚠️  Could not convert to xarray for datetime extraction: {e}")
+                print(f"  Could not convert to xarray for datetime extraction: {e}")
                 pass
 
         if xr_ds is not None:
@@ -344,18 +344,28 @@ def _deaccumulate_precipitation_for_interval(
     interval: int,
     steps_hours: list[int],
     parameter: str = "tp",
-) -> xr.DataArray | None:
-    """Deaccumulate precipitation for a specific time interval."""
+) -> xr.DataArray:
+    """Deaccumulate precipitation for a specific time interval (non-overlapping).
+
+    Args:
+        precip_data: Xarray DataArray with accumulated precipitation and 'step' coordinate
+        interval: Desired deaccumulation interval in hours (e.g., 6 for 6-hour precipitation)
+        steps_hours: List of forecast steps in hours corresponding to precip_data
+        parameter: Precipitation parameter short name ("tp", "cp", "lsp")
+
+    Returns:
+        Deaccumulated precipitation as Xarray DataArray with new 'step' coordinate,
+        or None if no valid intervals are found
+    """
     try:
         steps_hours = sorted(set(steps_hours))
-
         print(
             f"Processing {parameter} {interval}h deaccumulation for steps: {steps_hours}"
         )
 
         valid_pairs = []
-
         start_hour = 0
+
         while start_hour + interval <= max(steps_hours):
             end_hour = start_hour + interval
 
@@ -368,12 +378,14 @@ def _deaccumulate_precipitation_for_interval(
                 valid_pairs.append((start_idx, end_idx, start_step, end_step))
                 print(f"Found interval: {start_step}h → {end_step}h")
             else:
-                print(f"Could not find steps for interval {start_hour}h → {end_hour}h")
+                print(f" Could not find steps for interval {start_hour}h → {end_hour}h")
 
             start_hour = end_hour
 
         if not valid_pairs:
-            print(f"No valid {interval}h pairs found in available steps: {steps_hours}")
+            print(
+                f" No valid {interval}h pairs found in available steps: {steps_hours}"
+            )
             return None
 
         print(f"Found {len(valid_pairs)} non-overlapping {interval}h intervals")
@@ -385,7 +397,6 @@ def _deaccumulate_precipitation_for_interval(
             try:
                 tp_start = precip_data.isel(step=start_idx)
                 tp_end = precip_data.isel(step=end_idx)
-
                 precip_diff = tp_end - tp_start
 
                 end_time_coord = precip_data.step.values[end_idx]
@@ -394,13 +405,12 @@ def _deaccumulate_precipitation_for_interval(
 
                 actual_interval = end_step - start_step
                 print(f"{start_step}h → {end_step}h (actual: {actual_interval}h)")
-
             except Exception as e:
                 print(f" Error processing pair {start_step}h → {end_step}h: {e}")
                 continue
 
         if not deaccum_values:
-            print(f"No valid deaccumulation values calculated for {interval}h")
+            print(f" No valid deaccumulation values calculated for {interval}h")
             return None
 
         deaccum_array = np.array(deaccum_values)
@@ -438,20 +448,31 @@ def _deaccumulate_precipitation_for_interval(
         return deaccum_da
 
     except Exception:
+        print(" Unexpected error during deaccumulation:")
         traceback.print_exc()
         return None
 
 
 def _find_closest_step(
     target_hour: int, available_steps: list[int], tolerance: int = 3
-) -> int | None:
-    """Find the closest available step to target hour."""
+) -> int:
+    """Find the closest available forecast step to a target hour.
+
+    Args:
+        target_hour: Desired forecast hour
+        available_steps: List of available forecast steps (hours)
+        tolerance: Maximum allowed difference between target and available step (default: 3)
+
+    Returns:
+        Closest step within tolerance, or None if no step is close enough
+    """
     if target_hour in available_steps:
         return target_hour
 
     closest_steps = [
         step for step in available_steps if abs(step - target_hour) <= tolerance
     ]
+
     if closest_steps:
         return min(closest_steps, key=lambda x: abs(x - target_hour))
 

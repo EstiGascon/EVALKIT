@@ -1,11 +1,9 @@
-"""Meteorological observations retriever using STVL command-line tool with parameter-specific handling."""
-
 import os
 import subprocess
 
 
 class ObservationsRetriever:
-    """Retrieve meteorological observations using STVL tool with proper parameter handling."""
+    """Retrieve meteorological observations using STVL tool"""
 
     def __init__(self, stvl_path: str = "/home/moz/bin/stvl_getgeo") -> None:
         """Initialize the observations retriever.
@@ -148,7 +146,7 @@ class ObservationsRetriever:
         times: str | None = None,
         output_dir: str | None = None,
     ) -> dict:
-        """Retrieve meteorological observations for a single parameter with proper handling.
+        """Retrieve meteorological observations for a single parameter.
 
         Args:
             sources: Data sources to retrieve from (e.g., "synop hdobs").
