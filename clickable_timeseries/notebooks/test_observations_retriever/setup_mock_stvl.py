@@ -9,6 +9,7 @@ import math
 import os
 import random
 import sys
+import time
 from datetime import datetime, timedelta
 
 
@@ -180,8 +181,6 @@ def main():  # noqa: D103, PLR0915
     print(f"Times: {args.times}")
     if args.period:
         print(f"Period: {args.period} hours")
-
-    import time
 
     time.sleep(0.5)
 

@@ -1,0 +1,168 @@
+{
+  "models": {
+    "ifs-single": {
+      "display_name": "IFS Operational",
+      "class": "od",
+      "stream": "oper",
+      "type": "fc",
+      "levtype": "sfc",
+      "step_pattern": "ifs_variable",
+      "supports_custom_step_expansion": true,
+      "description": "ECMWF Integrated Forecasting System",
+      "ui_order": 1
+    },
+    "aifs-single": {
+      "display_name": "AIFS Control",
+      "class": "ai",
+      "stream": "oper",
+      "type": "fc",
+      "levtype": "sfc",
+      "step_pattern": "six_hourly",
+      "supports_custom_step_expansion": false,
+      "description": "AI-based Integrated Forecasting System",
+      "ui_order": 2
+    }
+  },
+  "step_patterns": {
+    "six_hourly": {
+      "type": "fixed_interval",
+      "interval": 6,
+      "max_step": 360,
+      "description": "6-hourly steps from 0 to 360 hours"
+    },
+    "ifs_variable": {
+      "type": "date_based_intervals",
+      "description": "IFS variable step intervals based on forecast date",
+      "date_rules": [
+        {
+          "before": "1990-11-15",
+          "intervals": [[0, 120, 6], [120, 240, 12]]
+        },
+        {
+          "after": "1990-11-15",
+          "before": "2011-11-15",
+          "intervals": [[0, 144, 3], [144, 240, 6]]
+        },
+        {
+          "after": "2011-11-15",
+          "intervals": [[0, 90, 1], [90, 144, 3], [144, 240, 6]]
+        }
+      ],
+      "default_intervals": [[0, 90, 1], [90, 144, 3], [144, 240, 6]]
+    }
+  },
+  "parameters": {
+    "2t": {
+      "param_id": 167,
+      "name": "2m Temperature",
+      "display_name": "2m Temperature",
+      "units": "K",
+      "description": "2 metre temperature",
+      "available_models": ["aifs-single", "ifs-single"],
+      "category": "temperature",
+      "ui_order": 1
+    },
+    "mx2t": {
+      "param_id": 201,
+      "name": "Max 2m Temperature",
+      "display_name": "Max 2m Temperature",
+      "units": "K",
+      "description": "Maximum 2 metre temperature",
+      "available_models": ["ifs-single"],
+      "category": "temperature",
+      "ui_order": 2
+    },
+    "mn2t": {
+      "param_id": 202,
+      "name": "Min 2m Temperature",
+      "display_name": "Min 2m Temperature",
+      "units": "K",
+      "description": "Minimum 2 metre temperature",
+      "available_models": ["ifs-single"],
+      "category": "temperature",
+      "ui_order": 3
+    },
+    "2d": {
+      "param_id": 168,
+      "name": "2m Dewpoint Temperature",
+      "display_name": "2m Dewpoint Temperature",
+      "units": "K",
+      "description": "2 metre dewpoint temperature",
+      "available_models": ["aifs-single", "ifs-single"],
+      "category": "temperature",
+      "ui_order": 4
+    },
+    "10u": {
+      "param_id": 165,
+      "name": "10m U-wind",
+      "display_name": "10m U-wind",
+      "units": "m s**-1",
+      "description": "10 metre U wind component",
+      "available_models": ["aifs-single", "ifs-single"],
+      "category": "wind",
+      "ui_order": 5
+    },
+    "10v": {
+      "param_id": 166,
+      "name": "10m V-wind",
+      "display_name": "10m V-wind",
+      "units": "m s**-1",
+      "description": "10 metre V wind component",
+      "available_models": ["aifs-single", "ifs-single"],
+      "category": "wind",
+      "ui_order": 6
+    },
+    "10fg": {
+      "param_id": 49,
+      "name": "10m Wind Gust",
+      "display_name": "Hourly 10m Wind Gust",
+      "units": "m s**-1",
+      "description": "10 metre wind gust",
+      "available_models": ["ifs-single"],
+      "category": "wind",
+      "ui_order": 7
+    },
+    "tp": {
+      "param_id": 228,
+      "name": "Total Precipitation",
+      "display_name": "Total Precipitation (cumulative)",
+      "units": "m",
+      "description": "Total precipitation in meters",
+      "available_models": ["aifs-single", "ifs-single"],
+      "category": "precipitation",
+      "ui_order": 9
+    },
+    "cp": {
+      "param_id": 143,
+      "name": "Convective Precipitation",
+      "display_name": "Convective Precipitation",
+      "units": "m",
+      "description": "Convective precipitation in meters",
+      "available_models": ["aifs-single", "ifs-single"],
+      "category": "precipitation",
+      "ui_order": 10
+    },
+    "lsp": {
+      "param_id": 142,
+      "name": "Large Scale Precipitation",
+      "display_name": "Large Scale Precipitation",
+      "units": "m",
+      "description": "Large scale precipitation in meters",
+      "available_models": ["ifs-single"],
+      "category": "precipitation",
+      "ui_order": 11
+    }
+  },
+  "ui_settings": {
+    "default_model": "ifs-single",
+    "default_parameters": ["2t"],
+    "default_bbox": {
+      "north": 72.0,
+      "west": -25.0,
+      "south": 34.0,
+      "east": 45.0
+    },
+    "default_time": "00:00:00",
+    "available_times": ["00:00:00", "06:00:00", "12:00:00", "18:00:00"]
+  }
+}

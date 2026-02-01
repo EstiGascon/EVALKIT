@@ -7,9 +7,16 @@ This script tests the complete workflow from parameter selection to data visuali
 import os
 import sys
 import tempfile
+import traceback
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent.parent))
+from helpers.observations_retriever import ObservationsRetriever
+from helpers.stations_manipulating import GeoDataProcessor, StationCreator
+from helpers.widgets.timeseries_user_interface import TimeseriesUI
+from helpers.widgets.user_interface.widget_configuration import (
+    WidgetConfiguration,
+)
 
 
 def test_observations_retriever():
@@ -31,8 +38,6 @@ def test_observations_retriever():
         return False
 
     try:
-        from helpers.observations_retriever import ObservationsRetriever
-
         retriever = ObservationsRetriever(stvl_path)
 
         # Test parameter info
@@ -85,7 +90,6 @@ def test_observations_retriever():
 
     except Exception as e:
         print(f"❌ Error testing ObservationsRetriever: {e}")
-        import traceback
 
         traceback.print_exc()
         return False
@@ -96,8 +100,6 @@ def test_station_loading():
     print("\nTesting station data loading...")
 
     try:
-        from helpers.stations_manipulating import StationCreator
-
         # Create test data directory
         with tempfile.TemporaryDirectory() as temp_dir:
             print(f"Creating test files in: {temp_dir}")
@@ -145,8 +147,6 @@ def test_station_loading():
             station_creator = StationCreator()
 
             try:
-                from helpers.stations_manipulating import GeoDataProcessor
-
                 geo_processor = GeoDataProcessor()
                 geo_files = geo_processor.get_geo_files(temp_dir)
                 print(f"Geo files found by GeoDataProcessor: {geo_files}")
@@ -166,7 +166,6 @@ def test_station_loading():
 
     except Exception as e:
         print(f"❌ Error testing station loading: {e}")
-        import traceback
 
         traceback.print_exc()
         return False
@@ -177,10 +176,6 @@ def test_ui_integration():
     print("\nTesting UI integration points...")
 
     try:
-        from helpers.widgets.user_interface.widget_configuration import (
-            WidgetConfiguration,
-        )
-
         config = WidgetConfiguration()
         widgets = config.get_widgets()
 
@@ -203,8 +198,6 @@ def test_ui_integration():
         else:
             print("✅ All observation widgets present")
 
-        from helpers.widgets.timeseries_user_interface import TimeseriesUI
-
         ui = TimeseriesUI()
         if hasattr(ui, "widgets") and "stvl_path" in ui.widgets:
             print("✅ UI initialization successful")
@@ -216,7 +209,6 @@ def test_ui_integration():
 
     except Exception as e:
         print(f"❌ Error testing UI integration: {e}")
-        import traceback
 
         traceback.print_exc()
         return False
