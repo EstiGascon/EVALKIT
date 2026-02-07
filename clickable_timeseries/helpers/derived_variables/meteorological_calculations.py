@@ -356,6 +356,7 @@ def _deaccumulate_precipitation_for_interval(
     Returns:
         Deaccumulated precipitation as Xarray DataArray with new 'step' coordinate,
         or None if no valid intervals are found
+
     """
     try:
         steps_hours = sorted(set(steps_hours))
@@ -465,6 +466,7 @@ def _find_closest_step(
 
     Returns:
         Closest step within tolerance, or None if no step is close enough
+
     """
     if target_hour in available_steps:
         return target_hour

@@ -46,7 +46,14 @@ ignore = [
     "D104",  # Ignore missing docstring in public package
     "D100",  # Ignore missing docstring in public module
     "D203",  # Ignore 1 blank line before class docstring
-    "D213",  # Ignore Multi-line docstring summary should start at teh second line
+    "D213",  # Ignore Multi-line docstring summary should start at the second line
     "E501",  # line too long, handled by black
     "W191",  # indentation contains tabs
+    "PLR2004",  # Magic value used in comparison
+    "PLR0912",  # Too many branches
+    "PLR0911",  # Too many return statements
+    "PLR0915",  # Too many statements 
+    "PLR0913",  # Too many arguments in function definition 
+
+
 ]

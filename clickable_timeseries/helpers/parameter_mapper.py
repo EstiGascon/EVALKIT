@@ -32,6 +32,7 @@ class ConfigurationManager:
 
         Returns:
             Integer ID of the parameter, or None if not found
+
         """
         return self.parameters.get(short_name, {}).get("param_id")
 
@@ -43,6 +44,7 @@ class ConfigurationManager:
 
         Returns:
             List of integer IDs of the parameters (excluding missing)
+
         """
         return [
             self.get_param_id(name)
@@ -58,6 +60,7 @@ class ConfigurationManager:
 
         Returns:
             Dictionary containing parameter information, or None if not found
+
         """
         return self.parameters.get(short_name, None)
 
@@ -69,6 +72,7 @@ class ConfigurationManager:
 
         Returns:
             String representing the expected units of the parameter, or None if not found
+
         """
         info = self.get_param_info(short_name)
         return info.get("units") if info else None
@@ -78,6 +82,7 @@ class ConfigurationManager:
 
         Returns:
             List of tuples (display_name, short_name) sorted by UI order
+
         """
         params = []
         for short_name, info in self.parameters.items():
@@ -96,6 +101,7 @@ class ConfigurationManager:
 
         Returns:
             List of parameter short names available for the model
+
         """
         available = []
         for short_name, info in self.parameters.items():
@@ -111,6 +117,7 @@ class ConfigurationManager:
 
         Returns:
             Dictionary containing model information, or None if not found
+
         """
         return self.models.get(model, None)
 
@@ -119,6 +126,7 @@ class ConfigurationManager:
 
         Returns:
             List of tuples (display_name, model_key) sorted by UI order
+
         """
         models = []
         for model_key, info in self.models.items():
@@ -137,6 +145,7 @@ class ConfigurationManager:
 
         Returns:
             String representing the MARS class (default: 'od')
+
         """
         return (
             self.get_model_info(model).get("class", "od")
@@ -152,6 +161,7 @@ class ConfigurationManager:
 
         Returns:
             String representing the MARS stream (default: 'oper')
+
         """
         return (
             self.get_model_info(model).get("stream", "oper")
@@ -167,6 +177,7 @@ class ConfigurationManager:
 
         Returns:
             Boolean indicating support for custom step expansion
+
         """
         return (
             self.get_model_info(model).get("supports_custom_step_expansion", False)
@@ -182,6 +193,7 @@ class ConfigurationManager:
 
         Returns:
             Step pattern name (default: 'ifs_variable')
+
         """
         return (
             self.get_model_info(model).get("step_pattern", "ifs_variable")
@@ -206,6 +218,7 @@ class ConfigurationManager:
 
         Returns:
             List of forecast steps in hours, empty list if pattern not found
+
         """
         pattern_name = self.get_step_pattern(model)
         pattern = self.step_patterns.get(pattern_name)
@@ -234,6 +247,7 @@ class ConfigurationManager:
 
         Returns:
             List of forecast steps in hours
+
         """
         interval = pattern.get("interval", 1)
 
@@ -274,6 +288,7 @@ class ConfigurationManager:
 
         Returns:
             List of forecast steps in hours
+
         """
         intervals = pattern.get("default_intervals", [[0, 240, 1]])
 
@@ -306,6 +321,7 @@ class ConfigurationManager:
 
         Returns:
             String representing the default model (default: 'ifs-single')
+
         """
         return self.ui_settings.get("default_model", "ifs-single")
 
@@ -314,6 +330,7 @@ class ConfigurationManager:
 
         Returns:
             List of default parameter short names (default: ['2t'])
+
         """
         return self.ui_settings.get("default_parameters", ["2t"])
 
@@ -322,6 +339,7 @@ class ConfigurationManager:
 
         Returns:
             Dictionary with keys 'north', 'west', 'south', 'east' defining bounding box
+
         """
         return self.ui_settings.get(
             "default_bbox", {"north": 72.0, "west": -25.0, "south": 34.0, "east": 45.0}
@@ -332,5 +350,6 @@ class ConfigurationManager:
 
         Returns:
             List of time strings (default: ['00:00:00'])
+
         """
         return self.ui_settings.get("available_times", ["00:00:00"])

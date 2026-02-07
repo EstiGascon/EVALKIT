@@ -14,14 +14,14 @@ class WindGustProcessor:
         self.available_intervals = {}
 
     def process_wind_gust_datasets(self, all_datasets: dict[str, Any]) -> bool:
-        """
-        Process multiple wind gust datasets to compute rolling maximums for different periods.
+        """Process multiple wind gust datasets to compute rolling maximums for different periods.
 
         Args:
             all_datasets (dict[str, Any]): Dictionary of datasets keyed by model name.
 
         Returns:
             bool: True if at least one dataset was processed successfully, False otherwise.
+
         """
         try:
             self.processed_datasets = {}
@@ -71,14 +71,14 @@ class WindGustProcessor:
             return False
 
     def _has_wind_gust(self, dataset) -> bool:
-        """
-        Check if the dataset contains the wind gust parameter '10fg'.
+        """Check if the dataset contains the wind gust parameter '10fg'.
 
         Args:
             dataset: Input dataset to check for wind gust parameter.
 
         Returns:
             bool: True if the dataset has wind gust data, False otherwise.
+
         """
         try:
             gust_fields = dataset.sel(param="10fg")
@@ -87,8 +87,7 @@ class WindGustProcessor:
             return False
 
     def _extract_wind_gust_data(self, dataset, model_name: str):
-        """
-        Extract wind gust data from the dataset, including values, time, coordinates, and metadata.
+        """Extract wind gust data from the dataset, including values, time, coordinates, and metadata.
 
         Args:
             dataset: Input dataset containing wind gust fields.
@@ -96,6 +95,7 @@ class WindGustProcessor:
 
         Returns:
             dict or None: Dictionary containing extracted wind gust records or None if extraction failed.
+
         """
         try:
             gust_fields = dataset.sel(param="10fg")
@@ -140,14 +140,14 @@ class WindGustProcessor:
             return None
 
     def _extract_time_info(self, field):
-        """
-        Extract time-related information from a wind gust field's metadata.
+        """Extract time-related information from a wind gust field's metadata.
 
         Args:
             field: Wind gust field containing metadata.
 
         Returns:
             dict: Dictionary containing time-related metadata keys and values.
+
         """
         try:
             metadata = field.metadata()
@@ -181,14 +181,14 @@ class WindGustProcessor:
             return {}
 
     def _extract_coordinate_info(self, field):
-        """
-        Extract coordinate-related information from a wind gust field's metadata.
+        """Extract coordinate-related information from a wind gust field's metadata.
 
         Args:
             field: Wind gust field containing metadata.
 
         Returns:
             dict: Dictionary containing coordinate-related metadata keys and values.
+
         """
         try:
             metadata = field.metadata()
@@ -225,8 +225,7 @@ class WindGustProcessor:
             return {}
 
     def _calculate_rolling_maximum(self, gust_data, model_name: str, period_hours: int):  # noqa: PLR0912, PLR0915
-        """
-        Calculate rolling maximum for a specified period in hours.
+        """Calculate rolling maximum for a specified period in hours.
 
         Args:
             gust_data (dict): Extracted wind gust data containing multiple records.
@@ -235,6 +234,7 @@ class WindGustProcessor:
 
         Returns:
             dict or None: Dictionary containing rolling maximum records or None if calculation failed.
+
         """
         try:
             if not gust_data or "records" not in gust_data:
@@ -361,8 +361,7 @@ class WindGustProcessor:
     def extract_wind_gust_timeseries(
         self, model_name: str, lat: float, lon: float, interval: str = "hourly"
     ) -> tuple[pd.DataFrame, float]:
-        """
-        Extract a wind gust timeseries at a specific latitude and longitude.
+        """Extract a wind gust timeseries at a specific latitude and longitude.
 
         Args:
             model_name (str): Name of the model.
@@ -372,6 +371,7 @@ class WindGustProcessor:
 
         Returns:
             tuple[pd.DataFrame, float]: DataFrame with forecast values indexed by time and average distance to nearest grid point.
+
         """
         try:
             if interval == "hourly":
@@ -426,8 +426,7 @@ class WindGustProcessor:
             return None, 0.0
 
     def _extract_nearest_value(self, values, coordinates, target_lat, target_lon):
-        """
-        Extract value at the nearest grid point for a given latitude and longitude.
+        """Extract value at the nearest grid point for a given latitude and longitude.
 
         Args:
             values (np.ndarray): Array of wind gust values.
@@ -437,6 +436,7 @@ class WindGustProcessor:
 
         Returns:
             tuple[float, float]: Value at nearest grid point and distance (currently always 0.0).
+
         """
         try:
             if len(values.shape) == 1:
@@ -453,14 +453,14 @@ class WindGustProcessor:
             return 0.0, 0.0
 
     def _create_time_index(self, time_info):
-        """
-        Create a pandas Timestamp or DatetimeIndex from the field's time information.
+        """Create a pandas Timestamp or DatetimeIndex from the field's time information.
 
         Args:
             time_info (dict): Dictionary containing time metadata.
 
         Returns:
             pd.Timestamp: Timestamp representing the time of the wind gust data.
+
         """
         try:
             if "valid_time" in time_info:

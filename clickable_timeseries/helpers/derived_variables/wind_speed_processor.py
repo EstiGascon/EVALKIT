@@ -22,8 +22,8 @@ class WindSpeedProcessor:
 
         Returns:
             bool: True if at least one dataset was successfully processed, otherwise False.
-        """
 
+        """
         try:
             self.processed_datasets = {}
             self.available_intervals = {}
@@ -74,8 +74,8 @@ class WindSpeedProcessor:
 
         Returns:
             bool: True if both 10u and 10v components exist, otherwise False.
-        """
 
+        """
         try:
             u_fields = dataset.sel(param="10u")
             v_fields = dataset.sel(param="10v")
@@ -93,8 +93,8 @@ class WindSpeedProcessor:
         Returns:
             dict or None: Structured dictionary containing processed wind speed records,
             or None if processing fails.
-        """
 
+        """
         try:
             u_fields = dataset.sel(param="10u")
             v_fields = dataset.sel(param="10v")
@@ -152,8 +152,8 @@ class WindSpeedProcessor:
 
         Returns:
             dict: Dictionary of extracted time metadata fields.
-        """
 
+        """
         try:
             metadata = field.metadata()
             time_info = {}
@@ -193,8 +193,8 @@ class WindSpeedProcessor:
 
         Returns:
             dict: Dictionary of extracted coordinate metadata.
-        """
 
+        """
         try:
             metadata = field.metadata()
 
@@ -239,8 +239,8 @@ class WindSpeedProcessor:
         Returns:
             dict or None: Dictionary containing daily mean wind speed records,
             or None if computation fails.
-        """
 
+        """
         try:
             if not wind_speed_data or "records" not in wind_speed_data:
                 return None
@@ -315,8 +315,8 @@ class WindSpeedProcessor:
         Returns:
             tuple[pd.DataFrame, float]: DataFrame indexed by datetime containing forecast values,
             and the average distance (km) from the target location to the nearest grid point.
-        """
 
+        """
         try:
             if interval == "daily_mean":
                 dataset_key = f"{model_name}_10ff_daily"
@@ -381,6 +381,7 @@ class WindSpeedProcessor:
 
         Returns:
             tuple[float, float]: Extracted value and distance (km) to the nearest grid point.
+
         """
         try:
             lat_first = coordinates.get("latitudeOfFirstGridPointInDegrees")
@@ -464,8 +465,8 @@ class WindSpeedProcessor:
 
         Returns:
             float: Distance between the points in kilometers.
-        """
 
+        """
         try:
             lat1_rad = math.radians(lat1)
             lon1_rad = math.radians(lon1)
@@ -495,8 +496,8 @@ class WindSpeedProcessor:
 
         Returns:
             pd.Timestamp: Parsed timestamp representing the forecast valid time.
-        """
 
+        """
         try:
             if "valid_time" in time_info:
                 return pd.to_datetime(time_info["valid_time"])

@@ -1,9 +1,11 @@
+"""Meteorological observations retriever using STVL command-line tool with parameter-specific handling."""
+
 import os
 import subprocess
 
 
 class ObservationsRetriever:
-    """Retrieve meteorological observations using STVL tool."""
+    """Retrieve meteorological observations using STVL tool with proper parameter handling."""
 
     def __init__(self, stvl_path: str = "/home/moz/bin/stvl_getgeo") -> None:
         """Initialize the observations retriever.
@@ -133,7 +135,6 @@ class ObservationsRetriever:
         elif param_info["type"] == "period" and period:
             return os.path.join(base_dir, parameter, f"{parameter}_{period}h")
         else:
-            # Fallback
             return os.path.join(base_dir, parameter)
 
     def retrieve(  # noqa: PLR0913
@@ -146,7 +147,7 @@ class ObservationsRetriever:
         times: str | None = None,
         output_dir: str | None = None,
     ) -> dict:
-        """Retrieve meteorological observations for a single parameter.
+        """Retrieve meteorological observations for a single parameter with proper handling.
 
         Args:
             sources: Data sources to retrieve from (e.g., "synop hdobs").
@@ -175,8 +176,6 @@ class ObservationsRetriever:
         os.makedirs(output_dir, exist_ok=True)
 
         try:
-            print(f"Executing STVL command for {parameter}...")
-
             cmd_list = [self.stvl_path, "--sources", sources, "--parameter", parameter]
 
             if uses_period and final_period:
@@ -196,7 +195,7 @@ class ObservationsRetriever:
                 ]
             )
 
-            subprocess.run(cmd_list, check=True)
+            subprocess.run(cmd_list, shell=True, check=True)
 
             result = {
                 "success": True,

@@ -1,0 +1,291 @@
+{
+  "stvl_path":"/home/moz/bin/stvl_getgeo",
+  "model_configs": {
+    "ifs": {
+      "class": "od",
+      "expver": "1",
+      "step_config": {
+        "type": "intervals",
+        "intervals": [[0, 90, 1], [90, 144, 3], [144, 360, 6]]
+      },
+      "deterministic": {
+        "fc": {
+          "type": "fc",
+          "expver": "1",
+          "stream": "oper",
+          "levtype": "sfc",
+          "description": "High Resolution Deterministic Forecast"
+        }
+      },
+      "probabilistic": {
+        "cf": {
+          "type": "cf",
+          "expver": "1",
+          "stream": "enfo",
+          "levtype": "sfc",
+          "description": "Control Forecast",
+          "members": 1
+        },
+        "pf": {
+          "type": "pf", 
+          "expver": "1",
+          "stream": "enfo",
+          "levtype": "sfc",
+          "description": "Perturbed Forecast (Ensemble Members)",
+          "members": 50,
+          "number_range": "1/to/50"
+
+        },
+        "cd": {
+          "type": "cd",
+          "expver": "1",
+          "stream": "efhs",
+          "levtype": "sfc",
+          "description": "Climate-data: Ensemble forecast hindcast statistics",
+          "quantiles": [0, 1, 2, 5, 10, 20, 25, 30, 40, 50, 60, 70, 75, 80, 90, 95, 98, 99, 100],
+          "available_steps": ["0-24", "12-36", "24-48", "36-60", "48-72", "60-84", "72-96", "84-108", "96-120", "108-132", "120-144", "132-156", "144-168", "156-180", "168-192", "180-204", "192-216", "204-228", "216-240", "228-252", "240-264", "252-276", "264-288", "276-300", "288-312", "300-324", "312-336", "324-348", "336-360"]
+        }
+      }
+    },
+    "aifs": {
+      "class": "ai",
+      "expver": "0001", 
+      "step_config": {
+        "type": "range",
+        "start": 0,
+        "end": 360,
+        "step": 6
+      },
+      "deterministic": {
+        "fc": {
+          "type": "fc",
+          "expver": "0001", 
+          "stream": "oper",
+          "levtype": "sfc",
+          "description": "AIFS Single Deterministic Forecast"
+        }
+      },
+      "probabilistic": {
+        "cf": {
+          "type": "cf",
+          "stream": "enfo",
+          "expver": "0001", 
+          "levtype": "sfc",
+          "description": "AIFS Control Forecast", 
+          "members": 1
+        },
+        "pf": {
+          "type": "pf",
+          "stream": "enfo", 
+          "expver": "0001", 
+          "levtype": "sfc",
+          "description": "AIFS Perturbed Forecast (Ensemble Members)",
+          "members": 50,
+          "number_range": "1/to/50"
+        }
+      }
+    }
+  },
+  "parameter_mappings": {
+    "pressure_levels": {
+      "t": [850],
+      "z": [500]
+    },
+    "climate_data": {
+      "avg_2t": "4.228",
+      "tp": "228.128",
+      "10fg": "49.128",
+      "msl": "5.228",
+      "mn2t6": "202.128",
+      "mx2t6": "201.128",
+      "avg_10ws": "5.228",
+      "ts": "144.128",
+      "sf": "144.128",
+      "capes": "44.228",
+      "cape": "59.128"
+    },
+    "param_ids": {
+      "2t": "167.128",
+      "10u": "165.128",
+      "10v": "166.128",
+      "cape": "59.228",
+      "cp": "143.128",
+      "msl": "151.128",
+      "tp": "228.128",
+      "lsp": "142.128",
+      "mn2t6": "122.128",
+      "mx2t6": "121.128",
+      "i10fg": "29.228",
+      "sf": "144.128",
+      "capes": "44.228",
+      "t": "130.128",
+      "z": "129.128",
+      "ws": "207.128"
+    }
+  },
+  "use_cases": {
+    "meteogram": {
+      "description": "Time series for single location with forecast range",
+      "required_data": ["pf"],
+      "optional_data": ["cf"],
+      "typical_params": ["msl", "tp", "2t", "10u", "10v", "cp", "lsp", "t", "z"]
+    },
+    "plumes": {
+      "description": "Ensemble plumes plots for uncertainty visualization",
+      "required_data": ["cf", "pf"],
+      "typical_params": ["msl", "tp", "2t", "10u", "10v", "cp", "lsp", "t", "z"]
+    },
+    "stamps": {
+      "description": "Stamp plots for specific forecast date and step with ensemble spread",
+      "required_data": ["fc", "cf", "pf"],
+      "typical_params": ["msl", "tp", "2t", "10u", "10v", "cp", "lsp", "t", "z"]
+    },
+    "cdf": {
+      "description": "Cumulative Distribution Functions from climate data",
+      "required_data": ["cd", "pf"],
+      "typical_params": ["2t", "tp", "i10fg", "mn2t6", "mx2t6", "sf", "capes"]
+    }
+  },
+  "surface_variables": {
+    "2t": {
+      "name": "2 metre temperature", 
+      "units": "K", 
+      "type": "instantaneous",
+      "param_id": "167.128",
+      "climate_param": "avg_2t"
+    },
+    "mn2t6": {
+      "name": "2 metre minimum temperature (last 6h)", 
+      "units": "K", 
+      "type": "min",
+      "param_id": "122.128",
+      "climate_param": "mn2t"
+    },
+    "mx2t6": {
+      "name": "2 metre maximum temperature (last 6h)", 
+      "units": "K", 
+      "type": "max",
+      "param_id": "121.128",
+      "climate_param": "mx2t"
+    },
+    "10u": {
+      "name": "10 metre U wind component", 
+      "units": "m/s", 
+      "type": "instantaneous",
+      "param_id": "165.128"
+    },
+    "10v": {
+      "name": "10 metre V wind component", 
+      "units": "m/s", 
+      "type": "instantaneous",
+      "param_id": "166.128"
+    },
+    "i10fg": {
+      "name": "10 metre wind gust", 
+      "units": "m/s", 
+      "type": "instantaneous",
+      "param_id": "29.228",
+      "climate_param": "10fg"
+    },
+    "msl": {
+      "name": "Mean sea level pressure", 
+      "units": "Pa", 
+      "type": "instantaneous",
+      "param_id": "151.128"
+    },
+    "sf": {
+      "name": "Snowfall", 
+      "units": "m", 
+      "type": "accumulation",
+      "param_id": "144.128",
+      "climate_param": "sf"
+    },
+    "cape": {
+      "name": "Convective available potential energy", 
+      "units": "J/kg", 
+      "type": "instantaneous",
+      "param_id": "59.228",
+      "climate_param": "cape"
+    },
+    "capes": {
+      "name": "Convective Available Potential Energy Shear", 
+      "units": "m", 
+      "type": "instantaneous",
+      "param_id": "44.228",
+      "climate_param": "capes"
+    },
+    "t": {
+      "name": "850 hPa Temperature", 
+      "units": "K", 
+      "type": "instantaneous", 
+      "pressure_level": true,
+      "param_id": "130.128",
+      "default_levels": [850]
+    },
+    "z": {
+      "name": "500 hPa Geopotential", 
+      "units": "m**2/s**2", 
+      "type": "instantaneous", 
+      "pressure_level": true,
+      "param_id": "129.128",
+      "default_levels": [500]
+    },
+    "ws": {
+      "name": "10 metre wind speed",
+      "units": "m/s",
+      "type": "calculated",
+      "description": "Calculated from 10u and 10v components"
+    },
+    "tp": {
+      "name": "6-hour total precipitation",
+      "units": "m",
+      "type": "calculated",
+      "description": "6-hour total precipitation",
+      "param_id": "228.128",
+      "climate_param": "tp"
+    },
+    "lsp": {
+      "name": "6-hour large-scale precipitation", 
+      "units": "m",
+      "type": "calculated",
+      "description": "6-hour large-scale precipitation",
+      "param_id": "142.128"
+    },
+    "cp": {
+      "name": "6-hour convective precipitation",
+      "units": "m", 
+      "type": "calculated",
+      "description": "6-hour convective precipitation",
+      "param_id": "143.128"
+    }
+  },
+  "pressure_levels": {
+    "standard": [850, 500]
+  },
+  "notebook_configs": {
+    "ensemble_analysis": {
+      "description": "Ensemble forecasts",
+      "allowed_models": ["ifs", "aifs"],
+      "allowed_forecast_types": ["deterministic", "probabilistic"],
+      "default_model": "ifs"
+    },
+    "dynamic_maps": {
+      "description": "Spatial analysis with dynamic maps",
+      "allowed_models": ["ifs", "aifs"],
+      "allowed_forecast_types": ["deterministic"],
+      "default_model": "ifs"
+    },
+    "clickable_timeseries": {
+      "description": "Time series analysis for single locations",
+      "allowed_models": ["ifs", "aifs"],
+      "allowed_forecast_types": ["deterministic"],
+      "default_model": "ifs"
+    }
+  },
+  "metadata": {
+    "version": "1.1",
+    "last_updated": "2025-08-15",
+    "description": "Configuration organized by model class (IFS/AIFS) and forecast type with parameter IDs",
+    "structure": "model_class -> forecast_type -> specific_configurations"
+  }
+}

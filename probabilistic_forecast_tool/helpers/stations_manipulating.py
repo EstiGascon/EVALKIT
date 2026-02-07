@@ -2,10 +2,10 @@ import glob
 from datetime import datetime
 from pathlib import Path
 
-import geopandas as gpd
-import numpy as np
-import pandas as pd
-from shapely.geometry import Point
+import geopandas as gpd  # type: ignore
+import numpy as np  # type: ignore
+import pandas as pd  # type: ignore
+from shapely.geometry import Point  # type: ignore
 
 
 class DateTimeExtractor:
@@ -180,15 +180,7 @@ class GeoDataProcessor:
 
     @staticmethod
     def get_geo_files(folder_path):
-        """Search folder_path for files with '_obs_' in the filename and '.geo' extension, returning a sorted list of matching file paths.
-
-        Args:
-            folder_path (str or Path): Directory to search.
-
-        Returns:
-            list[str]: Sorted list of geo file paths.
-
-        """
+        """Get all geo files from the specified folder."""
         geo_files = glob.glob(str(Path(folder_path) / "*_obs_*.geo"))
         geo_files.sort()
         return geo_files
@@ -249,17 +241,3 @@ class StationCreator:
         gdf.set_index("stnid", inplace=True)
 
         return gdf
-
-    def create_station_info_df(self, station_metadata):
-        """Convert station metadata dictionary to a pandas DataFrame.
-
-        Args:
-            station_metadata (dict): Dictionary containing station metadata with station IDs as keys.
-
-        Returns:
-            pandas.DataFrame: DataFrame with metadata fields as columns.
-
-        """
-        metadata_df = pd.DataFrame.from_dict(station_metadata, orient="index")
-        metadata_df.index.name = "stnid"
-        return metadata_df
