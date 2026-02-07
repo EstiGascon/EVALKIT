@@ -16,6 +16,7 @@ class BoundingBoxManager:
             current_bbox: Current bounding box coordinates as a tuple (west, south, east, north)
             saved_bboxes: List of previously saved bounding boxes
             current_bbox_params: Dictionary containing current bounding box parameters
+
         """
         self.current_bbox = None
         self.saved_bboxes = []
@@ -33,6 +34,7 @@ class BoundingBoxManager:
         Updates:
             current_bbox: Stores the bounding box coordinates
             current_bbox_params: Dictionary containing bounding box info including width, height, timestamp, and station count
+
         """
         min_lon, min_lat, max_lon, max_lat = bounds
         self.current_bbox = bounds
@@ -53,6 +55,7 @@ class BoundingBoxManager:
 
         Returns:
             Tuple of (west, south, east, north) if a bounding box is set, otherwise None
+
         """
         return self.current_bbox
 
@@ -61,6 +64,7 @@ class BoundingBoxManager:
 
         Returns:
             Dictionary containing bounding box parameters including coordinates, width, height, timestamp, and station count, or None if no bounding box is set
+
         """
         return self.current_bbox_params.copy() if self.current_bbox_params else None
 
@@ -80,6 +84,7 @@ class ForecastDataLoader:
             source: Data source ("mars" for Mars Archive, "file" for local files)
             bbox_manager: Optional bounding box manager instance
             **kwargs: Additional configuration parameters
+
         """
         self.source = source
         self.config = kwargs
@@ -121,6 +126,7 @@ class ForecastDataLoader:
 
         Returns:
             Dictionary with keys: 'dataset', 'metadata', 'model_key', or None if no valid parameters
+
         """
         if end_date < start_date:
             print("⚠️  End date is before start date. Returning None.")
@@ -176,6 +182,7 @@ class ForecastDataLoader:
 
         Returns:
             List of parameter short names that are available for the model
+
         """
         filtered = []
         unavailable = []
@@ -231,6 +238,7 @@ class ForecastDataLoader:
 
         Returns:
             Dictionary with keys 'dataset', 'metadata', 'model_key' or None if request fails
+
         """
         param_ids = self.config_manager.get_param_ids(param)
         class_model = self.config_manager.get_model_class(model)
@@ -315,6 +323,7 @@ class ForecastDataLoader:
 
         Returns:
             List of forecast steps in hours (empty if end < start)
+
         """
         start_datetime = datetime.datetime.combine(
             start_date, datetime.time.fromisoformat(start_time)
@@ -340,6 +349,7 @@ class ForecastDataLoader:
 
         Returns:
             Expanded list of steps
+
         """
         if not custom_steps:
             return []
@@ -352,6 +362,7 @@ class ForecastDataLoader:
 
         Returns:
             List of coordinates [north, west, south, east] or None if no bbox is set
+
         """
         bbox = self.bbox_manager.get_current_bbox()
         if bbox:
@@ -364,6 +375,7 @@ class ForecastDataLoader:
 
         Returns:
             Dataset object or None if not loaded
+
         """
         return self.loaded_datasets.get(model_key)
 
@@ -372,6 +384,7 @@ class ForecastDataLoader:
 
         Returns:
             Copy of loaded datasets dictionary
+
         """
         return self.loaded_datasets.copy()
 
@@ -386,6 +399,7 @@ class ForecastDataLoader:
 
         Returns:
             Dataset object or None if loading fails
+
         """
         try:
             ds = ekd.from_source("file", grib_file_path)

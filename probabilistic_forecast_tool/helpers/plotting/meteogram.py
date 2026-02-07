@@ -160,31 +160,35 @@ class MeteogramPlotting:
         return point_data
 
     def _preprocess_data(self, data_source, parameter: str):
-            """Extract parameter as DataArray from data source.
+        """Extract parameter as DataArray from data source.
 
-            Parameters
-            ----------
-            data_source : earthkit or xarray object
-                Input data
-            parameter : str
-                Parameter name to extract
+        Parameters
+        ----------
+        data_source : earthkit or xarray object
+            Input data
+        parameter : str
+            Parameter name to extract
 
-            Returns
-            -------
-            xr.DataArray
-                Extracted parameter data
+        Returns
+        -------
+        xr.DataArray
+            Extracted parameter data
 
-            """
-            if hasattr(data_source, 'sel'):
-                selected_data = data_source.sel(param=parameter)
-                xr_data = selected_data.to_xarray()
-            else:
-                xr_data = data_source if isinstance(data_source, xr.DataArray | xr.Dataset) else data_source.to_xarray()
+        """
+        if hasattr(data_source, "sel"):
+            selected_data = data_source.sel(param=parameter)
+            xr_data = selected_data.to_xarray()
+        else:
+            xr_data = (
+                data_source
+                if isinstance(data_source, xr.DataArray | xr.Dataset)
+                else data_source.to_xarray()
+            )
 
-            if isinstance(xr_data, xr.Dataset):
-                return xr_data[list(xr_data.data_vars)[0]]
+        if isinstance(xr_data, xr.Dataset):
+            return xr_data[list(xr_data.data_vars)[0]]
 
-            return xr_data
+        return xr_data
 
     def _load_and_select_data(self, data_source, parameter: str) -> xr.DataArray:
         """Load and extract parameter from data source.

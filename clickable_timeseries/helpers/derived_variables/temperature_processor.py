@@ -22,6 +22,7 @@ class TemperatureProcessor:
 
         Returns:
             True if any datasets were successfully processed, False otherwise.
+
         """
         try:
             self.processed_datasets = {}
@@ -92,6 +93,7 @@ class TemperatureProcessor:
 
         Returns:
             List of available temperature parameters (subset of ["2t", "2d"]).
+
         """
         available_params = []
 
@@ -115,6 +117,7 @@ class TemperatureProcessor:
 
         Returns:
             Dictionary with "records" list, or None if no valid data is found.
+
         """
         try:
             temp_fields = dataset.sel(param=temp_param)
@@ -172,6 +175,7 @@ class TemperatureProcessor:
 
         Returns:
             Dictionary with time-related keys and their values (may include step, valid_time, etc.).
+
         """
         try:
             metadata = field.metadata()
@@ -212,6 +216,7 @@ class TemperatureProcessor:
 
         Returns:
             Dictionary with coordinate keys and their values, including grid and geolocation info.
+
         """
         try:
             metadata = field.metadata()
@@ -269,6 +274,7 @@ class TemperatureProcessor:
                 - "param": parameter name with aggregation suffix
                 - "aggregation": aggregation type (e.g., "24h_max" or "24h_min")
             Returns None if input data is missing or no valid daily extremes can be calculated.
+
         """
         try:
             if not temp_data or "records" not in temp_data:
@@ -405,6 +411,7 @@ class TemperatureProcessor:
             Tuple of (date, time):
                 - date: Integer in YYYYMMDD format
                 - time: Integer in HHMM format (0 if fallback used)
+
         """
         try:
             if records and len(records) > 0:
@@ -453,6 +460,7 @@ class TemperatureProcessor:
         Returns:
             pandas Timestamp representing the datetime corresponding to the given step.
             Falls back to current datetime plus step_hours if an error occurs.
+
         """
         try:
             if base_date is None or base_time is None:
@@ -503,6 +511,7 @@ class TemperatureProcessor:
                 - Pandas DataFrame with index 'time' and column 'forecast_value', or None if no data
                 - Average distance in kilometers from target location to the nearest grid points
                 used for extraction (0.0 if no data)
+
         """
         try:
             if interval == "hourly":
@@ -579,6 +588,7 @@ class TemperatureProcessor:
                 extracted_value: Float value at nearest grid point (or center fallback)
                 distance_km: Distance in kilometers from target location to extracted point
                             (0.0 if fallback was used or error occurred)
+
         """
         try:
             lat_first = coordinates.get("latitudeOfFirstGridPointInDegrees")
@@ -660,6 +670,7 @@ class TemperatureProcessor:
 
         Returns:
             Distance between the two points in kilometers. Returns 0.0 if an error occurs.
+
         """
         try:
             lat1_rad = math.radians(lat1)
@@ -691,6 +702,7 @@ class TemperatureProcessor:
         Returns:
             pandas Timestamp or DatetimeIndex representing the time. If neither key is present
             or an error occurs, returns the current timestamp.
+
         """
         try:
             if "valid_time" in time_info:
@@ -715,6 +727,7 @@ class TemperatureProcessor:
             Tuple containing:
                 date: Base date extracted from metadata, or None if unavailable
                 time: Base time extracted from metadata, or None if unavailable
+
         """
         try:
             metadata = field.metadata()

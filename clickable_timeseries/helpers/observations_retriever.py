@@ -3,7 +3,7 @@ import subprocess
 
 
 class ObservationsRetriever:
-    """Retrieve meteorological observations using STVL tool"""
+    """Retrieve meteorological observations using STVL tool."""
 
     def __init__(self, stvl_path: str = "/home/moz/bin/stvl_getgeo") -> None:
         """Initialize the observations retriever.

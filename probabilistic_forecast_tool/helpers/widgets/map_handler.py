@@ -154,14 +154,14 @@ class WeatherMapHandler:
 
                 if (
                     self.last_click_coords
-                    and abs(lat - self.last_click_coords[0]) < 0.0001
-                    and abs(lon - self.last_click_coords[1]) < 0.0001
+                    and abs(lat - self.last_click_coords[0]) < 0.0001  # noqa: PLR2004
+                    and abs(lon - self.last_click_coords[1]) < 0.0001  # noqa: PLR2004
                     and current_time - self.last_click_time
                     < self.click_dedupe_threshold
                 ):
                     return
 
-                if current_time - self.last_draw_time < 0.2:
+                if current_time - self.last_draw_time < 0.2:  # noqa: PLR2004
                     return
 
                 self.last_click_time = current_time
@@ -535,7 +535,7 @@ class WeatherMapHandler:
 
         return self.current_bbox
 
-    def set_current_bbox_and_update_ui(
+    def set_current_bbox_and_update_ui(  # noqa: PLR0912
         self, north=None, south=None, east=None, west=None, bbox_dict=None
     ):
         """Set the current bounding box coordinates and automatically update UI."""
@@ -549,7 +549,7 @@ class WeatherMapHandler:
                 print(f"Error extracting bbox from dictionary: {e}")
                 return
 
-        if isinstance(north, tuple | list) and len(north) == 4:
+        if isinstance(north, tuple | list) and len(north) == 4:  # noqa: PLR2004
             min_lon, min_lat, max_lon, max_lat = north
             north, south, east, west = max_lat, min_lat, max_lon, min_lon
 
@@ -566,11 +566,11 @@ class WeatherMapHandler:
             print(f"Error converting bbox coordinates to float: {e}")
             return
 
-        if not (-90 <= north_val <= 90) or not (-90 <= south_val <= 90):
+        if not (-90 <= north_val <= 90) or not (-90 <= south_val <= 90):  # noqa: PLR2004
             print("Error: Latitude values must be between -90 and 90")
             return
 
-        if not (-180 <= east_val <= 180) or not (-180 <= west_val <= 180):
+        if not (-180 <= east_val <= 180) or not (-180 <= west_val <= 180):  # noqa: PLR2004
             print("Error: Longitude values must be between -180 and 180")
             return
 

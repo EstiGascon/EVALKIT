@@ -145,10 +145,11 @@ class PlumesPlotting:
         """
         quantile_data = self._calculate_quantile_shading(ensemble_ts)
 
-        date_str = metadata['date']
+        date_str = metadata["date"]
         if "-" in date_str:
             forecast_datetime = datetime.strptime(
-                f"{date_str.replace('-', '')}{metadata['time'].split(':')[0]}", "%Y%m%d%H"
+                f"{date_str.replace('-', '')}{metadata['time'].split(':')[0]}",
+                "%Y%m%d%H",
             )
         else:
             forecast_datetime = datetime.strptime(
@@ -408,10 +409,11 @@ class PlumesPlotting:
             (start_time, end_time)
 
         """
-        date_str = metadata['date']
+        date_str = metadata["date"]
         if "-" in date_str:
             init_datetime = datetime.strptime(
-                f"{date_str.replace('-', '')}{metadata['time'].split(':')[0]}", "%Y%m%d%H"
+                f"{date_str.replace('-', '')}{metadata['time'].split(':')[0]}",
+                "%Y%m%d%H",
             )
         else:
             init_datetime = datetime.strptime(
@@ -572,16 +574,17 @@ class PlumesPlotting:
 
         metadata = forecast_data[forecast_type]["metadata"]
 
-        date_str = metadata['date']
+        date_str = metadata["date"]
         if "-" in date_str:
             init_datetime = datetime.strptime(
-                f"{date_str.replace('-', '')}{metadata['time'].split(':')[0]}", "%Y%m%d%H"
+                f"{date_str.replace('-', '')}{metadata['time'].split(':')[0]}",
+                "%Y%m%d%H",
             )
         else:
             init_datetime = datetime.strptime(
                 f"{date_str}{metadata['time'].split(':')[0]}", "%Y%m%d%H"
             )
-    
+
         forecast_steps = [int(step) for step in metadata["steps"]]
         time_axis = [init_datetime + timedelta(hours=step) for step in forecast_steps]
 
@@ -685,16 +688,17 @@ class PlumesPlotting:
 
         # Add control forecast
         if control_ts is not None:
-            date_str = metadata['date']
+            date_str = metadata["date"]
             if "-" in date_str:
                 forecast_datetime = datetime.strptime(
-                    f"{date_str.replace('-', '')}{metadata['time'].split(':')[0]}", "%Y%m%d%H"
+                    f"{date_str.replace('-', '')}{metadata['time'].split(':')[0]}",
+                    "%Y%m%d%H",
                 )
             else:
                 forecast_datetime = datetime.strptime(
                     f"{date_str}{metadata['time'].split(':')[0]}", "%Y%m%d%H"
                 )
-    
+
             customdata = [
                 int((time_point - forecast_datetime).total_seconds() / 3600)
                 for time_point in time_axis
@@ -743,10 +747,12 @@ class PlumesPlotting:
         # Create title
         date_str = metadata["date"]
         if "-" in date_str:
-            formatted_date = datetime.strptime(date_str, "%Y-%m-%d").strftime("%d %B %Y")
+            formatted_date = datetime.strptime(date_str, "%Y-%m-%d").strftime(
+                "%d %B %Y"
+            )
         else:
             formatted_date = datetime.strptime(date_str, "%Y%m%d").strftime("%d %B %Y")
-            
+
         location_str = f"{lat:.2f}°, {lon:.2f}°"
         if nearest_station:
             location_str += f" (Station: {nearest_station})"
