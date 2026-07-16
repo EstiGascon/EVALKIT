@@ -142,33 +142,65 @@ class WidgetConfiguration:
         self._create_grid_and_step_widgets()
 
     def _create_model_selection_widget(self):
-        """Create model class selection dropdown.
+        """Create model selection checkboxes.
 
-        Builds dropdown options from model configurations with descriptions
-        and sets default to IFS model.
+        Builds one checkbox per model from configuration, allowing
+        multi-model selection. IFS is checked by default.
         """
-        model_options = self._build_model_options()
-
-        self.widgets["model_class"] = widgets.Dropdown(
-            options=model_options,
-            value="ifs",
-            description="Model Class:",
-            style={"description_width": "initial"},
-            layout=widgets.Layout(width="300px"),
+        model_checkboxes = []
+        self.widgets["model_checkboxes"] = {}
+        for model_name, model_config in self.model_configs.items():
+            display_name = model_config.get("display_name", model_name.upper())
+            cb = widgets.Checkbox(
+                value=(model_name == "ifs"),
+                description=display_name,
+                indent=False,
+                layout=widgets.Layout(width="auto", margin="0 15px 0 0"),
+            )
+            self.widgets[f"model_cb_{model_name}"] = cb
+            self.widgets["model_checkboxes"][model_name] = cb
+            model_checkboxes.append(cb)
+        self.widgets["model_selection_box"] = widgets.HBox(
+            model_checkboxes,
+            layout=widgets.Layout(margin="5px 0"),
         )
 
-    def _build_model_options(self):
-        """Build model options list from configuration.
+        self._create_custom_experiment_widgets()
 
-        Returns:
-            List of tuples in format [(display_text, model_code), ...].
-
-        """
-        model_options = []
-        for model_name, model_config in self.model_configs.items():
-            description = model_config.get("description", model_name.upper())
-            model_options.append((f"{model_name.upper()} - {description}", model_name))
-        return model_options
+    def _create_custom_experiment_widgets(self):
+        """Create hidden text inputs for custom RD experiment class and expver."""
+        self.widgets["custom_class"] = widgets.Text(
+            value="rd",
+            description="Class:",
+            placeholder="e.g. rd",
+            style={"description_width": "initial"},
+            layout=widgets.Layout(width="140px"),
+        )
+        self.widgets["custom_expver"] = widgets.Text(
+            value="",
+            description="Expver:",
+            placeholder="e.g. h4gv",
+            style={"description_width": "initial"},
+            layout=widgets.Layout(width="155px"),
+        )
+        self.widgets["custom_include_cf"] = widgets.Checkbox(
+            value=True,
+            description="Include Control Forecast (CF)",
+            style={"description_width": "initial"},
+            layout=widgets.Layout(width="260px"),
+        )
+        self.widgets["custom_experiment_box"] = widgets.VBox(
+            [
+                widgets.HTML(
+                    "<small style='color: #666;'>Custom experiment parameters:</small>"
+                ),
+                widgets.HBox(
+                    [self.widgets["custom_class"], self.widgets["custom_expver"]]
+                ),
+                self.widgets["custom_include_cf"],
+            ],
+            layout=widgets.Layout(display="none"),
+        )
 
     def _create_date_and_time_widgets(self):
         """Create date and time selection widgets for MARS retrieval.
@@ -224,20 +256,24 @@ class WidgetConfiguration:
         )
 
     def _create_days_back_slider(self):
-        """Create days back slider for CDF analysis.
+        """Create days back input for CDF analysis.
 
         Returns:
-            IntSlider widget for selecting historical days range (1-10).
+            BoundedIntText widget for selecting historical days range (1-10).
+            Using BoundedIntText instead of IntSlider avoids a known
+            ipywidgets race condition where the frontend sends null when
+            the slider is first added to a dynamic layout, which causes a
+            TraitError and leaves the backend value stuck at the initial 3.
 
         """
-        return widgets.IntSlider(
+        return widgets.BoundedIntText(
             value=3,
             min=1,
             max=10,
             step=1,
             description="Days Back:",
             style={"description_width": "initial"},
-            layout=widgets.Layout(width="300px"),
+            layout=widgets.Layout(width="200px"),
         )
 
     def _create_forecast_times_dropdown(self):
@@ -327,6 +363,20 @@ class WidgetConfiguration:
             placeholder="0-240 or specific steps",
             style={"description_width": "initial"},
             layout=widgets.Layout(width="250px"),
+        )
+
+        self.widgets["step_frequency"] = widgets.Dropdown(
+            options=[
+                ("1-hourly (all)", 1),
+                ("3-hourly", 3),
+                ("6-hourly", 6),
+                ("12-hourly", 12),
+                ("24-hourly", 24),
+            ],
+            value=1,
+            description="Frequency:",
+            style={"description_width": "initial"},
+            layout=widgets.Layout(width="200px"),
         )
 
     def _create_local_file_widgets(self):
@@ -556,6 +606,34 @@ class WidgetConfiguration:
             layout=widgets.Layout(width="100%", display="none"),
         )
 
+        self.widgets["obs_colorbar"] = widgets.HTML(
+            value="",
+            layout=widgets.Layout(display="none", margin="4px 0 0 0"),
+        )
+
+        self.widgets["obs_time_prev"] = widgets.Button(
+            description="◀ Prev",
+            button_style="",
+            layout=widgets.Layout(width="70px", display="none"),
+        )
+        self.widgets["obs_time_next"] = widgets.Button(
+            description="Next ▶",
+            button_style="",
+            layout=widgets.Layout(width="70px", display="none"),
+        )
+        self.widgets["obs_time_label"] = widgets.HTML(
+            value="",
+            layout=widgets.Layout(display="none", margin="0 8px"),
+        )
+        self.widgets["obs_time_nav"] = widgets.HBox(
+            [
+                self.widgets["obs_time_prev"],
+                self.widgets["obs_time_label"],
+                self.widgets["obs_time_next"],
+            ],
+            layout=widgets.Layout(display="none", align_items="center"),
+        )
+
     def _create_obs_info_html(self):
         """Create HTML for observation parameter info display.
 
@@ -655,14 +733,15 @@ class WidgetConfiguration:
     def _create_action_buttons(self):
         """Create main action buttons for data operations.
 
-        Creates validate and retrieve buttons arranged in a horizontal
+        Creates validate, retrieve and save buttons arranged in a horizontal
         layout for initiating configuration validation and data retrieval.
         """
         self.widgets["validate_btn"] = self._create_validate_button()
         self.widgets["retrieve_btn"] = self._create_retrieve_button()
+        self.widgets["save_btn"] = self._create_save_button()
 
         self.widgets["action_buttons"] = widgets.HBox(
-            [self.widgets["validate_btn"], self.widgets["retrieve_btn"]],
+            [self.widgets["validate_btn"], self.widgets["retrieve_btn"], self.widgets["save_btn"]],
             layout=widgets.Layout(justify_content="center"),
         )
 
@@ -692,6 +771,21 @@ class WidgetConfiguration:
             button_style="",
             layout=widgets.Layout(width="150px"),
             style={"button_color": "#86D5E0", "font_weight": "bold"},
+        )
+
+    def _create_save_button(self):
+        """Create save data to file button.
+
+        Returns:
+            Button widget for saving retrieved data to GRIB files.
+
+        """
+        return widgets.Button(
+            description="Save to File",
+            button_style="",
+            layout=widgets.Layout(width="130px"),
+            style={"button_color": "#B0BEC5", "font_weight": "bold"},
+            disabled=True,
         )
 
     def _create_step_selection_widgets(self):
@@ -1029,7 +1123,7 @@ class WidgetConfiguration:
             value="",
             description=f"{file_description} File Path:",
             disabled=False,
-            placeholder="Enter file path or use Browse button",
+            placeholder="Type full path here (e.g. /path/to/file.grib) or use Browse",
             style={"description_width": "initial"},
             layout=widgets.Layout(width="400px"),
         )

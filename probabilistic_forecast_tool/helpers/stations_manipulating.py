@@ -208,7 +208,7 @@ class StationCreator:
             crs: Coordinate reference system (default: WGS84)
 
         Returns:
-            GeoDataFrame with columns: stnid, latitude, longitude, elevation, geometry
+            GeoDataFrame indexed by stnid, with columns: latitude, longitude, elevation, geometry
 
         """
         geo_files = self.geo_processor.get_geo_files(param_folder_path)

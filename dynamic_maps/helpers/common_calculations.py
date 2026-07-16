@@ -13,10 +13,6 @@ import xarray as xr
 class WeatherDataAggregator:
     """Class for aggregating weather data over time periods."""
 
-    def __init__(self):
-        """Initialize the aggregator."""
-        pass
-
     def calculate_temporal_extremes(  # noqa: PLR0912, PLR0915
         self,
         dataset_or_result: Any,
@@ -124,7 +120,7 @@ class WeatherDataAggregator:
             if operation == "max":
                 result_da = var_data.max(dim=time_dim)
             elif operation == "min":
-                result_da = var_data.max(dim=time_dim)
+                result_da = var_data.min(dim=time_dim)
             else:
                 raise ValueError("Operation must be either 'max' or 'min'")
 

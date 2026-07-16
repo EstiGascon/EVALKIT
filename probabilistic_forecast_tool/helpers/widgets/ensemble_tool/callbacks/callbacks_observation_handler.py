@@ -14,6 +14,15 @@ from helpers.stations_manipulating import (
 )
 
 
+def _get_rdylbu_colormap():
+    """Return the RdYlBu_r matplotlib colormap, or None if matplotlib is unavailable."""
+    try:
+        from matplotlib import colormaps
+        return colormaps["RdYlBu_r"]
+    except Exception:
+        return None
+
+
 class ObservationHandlerCallbacks:
     """Handles observation data retrieval and management operations."""
 
@@ -25,6 +34,11 @@ class ObservationHandlerCallbacks:
 
         """
         self.parent = parent
+        self._obs_time_steps = []
+        self._obs_time_index = 0
+        self._obs_fixed_vmin = None
+        self._obs_fixed_vmax = None
+        self._obs_time_nav_setup = False
 
     def retrieve_observations(self, config):
         """Handle observation data.
@@ -74,12 +88,14 @@ class ObservationHandlerCallbacks:
 
         self._store_observation_data(folder_path, station_timeseries)
 
+        self._sync_observations_to_plotting_manager()
+
         self._enable_observation_plotting()
 
         return self._create_success_response(station_timeseries)
 
     def _handle_retrieve_mode(self, config):
-        """Retrieve observations using STVL.
+        """Retrieve observations using VINO.
 
         Args:
             config: Configuration dictionary
@@ -89,7 +105,7 @@ class ObservationHandlerCallbacks:
 
         """
         self._show_message(
-            "Retrieving observations using STVL...", "info", section="observation"
+            "Retrieving observations using VINO...", "info", section="observation"
         )
 
         param = self._validate_and_extract_parameter(config)
@@ -165,6 +181,20 @@ class ObservationHandlerCallbacks:
                 "source": "local_browse",
             },
         }
+
+    def _sync_observations_to_plotting_manager(self):
+        """Sync observations to the plotting manager so they are available for plots."""
+        if not (
+            hasattr(self.parent, "plotting_manager")
+            and self.parent.plotting_manager
+            and hasattr(self.parent.plotting_manager, "current_data")
+            and self.parent.plotting_manager.current_data
+            and "observations" in self.parent.current_data
+        ):
+            return
+
+        obs = self.parent.current_data["observations"]
+        self.parent.plotting_manager.current_data["observations"] = obs
 
     def _count_stations_in_bbox(self, station_timeseries):
         """Count how many stations are within the current bounding box.
@@ -454,7 +484,7 @@ class ObservationHandlerCallbacks:
 
             station_ids_in_bbox = filtered_stations.index.tolist()
 
-            station_timeseries = self.process_station_timeseries_data_for_stations(
+            station_timeseries = self.process_station_timeseries_data(
                 folder_path, station_ids_in_bbox
             )
 
@@ -473,6 +503,7 @@ class ObservationHandlerCallbacks:
             )
 
             self._create_unified_observation_markers(filtered_stations)
+            self._setup_obs_time_navigation()
 
             if self.parent.ui:
                 total_observations = sum(
@@ -497,11 +528,13 @@ class ObservationHandlerCallbacks:
                 )
             return False
 
-    def process_station_timeseries_data(self, folder_path):
+    def process_station_timeseries_data(self, folder_path, station_ids=None):
         """Process station timeseries data into dict format.
 
         Args:
             folder_path: Path to observation data folder
+            station_ids: Optional list of station IDs to restrict processing to.
+                If None, all stations found in the geo files are processed.
 
         Returns:
             dict: Station timeseries data
@@ -527,70 +560,7 @@ class ObservationHandlerCallbacks:
                     for station_record in station_data:
                         station_id = station_record["stnid"]
 
-                        if station_id not in station_timeseries:
-                            station_timeseries[station_id] = {
-                                "latitude": station_record["latitude"],
-                                "longitude": station_record["longitude"],
-                                "elevation": station_record.get("elevation"),
-                                "timeseries": [],
-                            }
-
-                        station_timeseries[station_id]["timeseries"].append(
-                            {
-                                "datetime": file_datetime,
-                                "value": station_record.get("value_0"),
-                            }
-                        )
-
-                except Exception as e:
-                    print(f"Error processing {geo_file}: {e}")
-                    continue
-
-            for station_id in station_timeseries:
-                station_timeseries[station_id]["timeseries"].sort(
-                    key=lambda x: x["datetime"]
-                )
-
-            return station_timeseries
-
-        except Exception as e:
-            if self.parent.ui:
-                self.parent.ui.show_alert_message(
-                    f"Error processing station timeseries: {e}",
-                    "error",
-                    section="observation",
-                    permanent=True,
-                )
-
-    def process_station_timeseries_data_for_stations(self, folder_path, station_ids):
-        """Process station timeseries data for specific station IDs only.
-
-        Args:
-            folder_path: Path to observation data folder
-            station_ids: List of station IDs to process
-
-        Returns:
-            dict: Station timeseries data
-
-        """
-        try:
-            geo_processor = GeoDataProcessor()
-            datetime_extractor = DateTimeExtractor()
-
-            geo_files = geo_processor.get_geo_files(folder_path)
-            station_timeseries = {}
-
-            for geo_file in geo_files:
-                try:
-                    filename = os.path.basename(geo_file)
-                    file_datetime = datetime_extractor.parse_filename_datetime(filename)
-
-                    station_data = geo_processor.read_geo_file(geo_file)
-
-                    for station_record in station_data:
-                        station_id = station_record["stnid"]
-
-                        if station_id not in station_ids:
+                        if station_ids is not None and station_id not in station_ids:
                             continue
 
                         if station_id not in station_timeseries:
@@ -802,12 +772,23 @@ class ObservationHandlerCallbacks:
 
         except Exception as e:
             if self.parent.ui:
-                self.parent.ui.show_alert_message(
-                    f"Error browsing observation folder: {e}",
-                    "error",
-                    section="observation",
-                    permanent=True,
-                )
+                err = str(e)
+                if "DISPLAY" in err or "display" in err or "Tcl" in err:
+                    self.parent.ui.show_alert_message(
+                        "Folder browser unavailable (no graphical display in this environment). "
+                        "Please type the full path to your observation folder directly into "
+                        "the 'Observation Folder' text box above and press Enter.",
+                        "warning",
+                        section="observation",
+                        permanent=True,
+                    )
+                else:
+                    self.parent.ui.show_alert_message(
+                        f"Error browsing observation folder: {e}",
+                        "error",
+                        section="observation",
+                        permanent=True,
+                    )
 
     def handle_browse_output_directory(self, widget, event, data):
         """Handle output directory browsing.
@@ -847,12 +828,23 @@ class ObservationHandlerCallbacks:
 
         except Exception as e:
             if self.parent.ui:
-                self.parent.ui.show_alert_message(
-                    f"Error browsing output directory: {e}",
-                    "error",
-                    section="observation",
-                    permanent=True,
-                )
+                err = str(e)
+                if "DISPLAY" in err or "display" in err or "Tcl" in err:
+                    self.parent.ui.show_alert_message(
+                        "Folder browser unavailable (no graphical display in this environment). "
+                        "Please type the full output directory path directly into "
+                        "the 'Output Directory' text box above and press Enter.",
+                        "warning",
+                        section="observation",
+                        permanent=True,
+                    )
+                else:
+                    self.parent.ui.show_alert_message(
+                        f"Error browsing output directory: {e}",
+                        "error",
+                        section="observation",
+                        permanent=True,
+                    )
 
     def update_observation_stations_for_bbox(self):
         """Reload observation stations and data when bbox changes."""
@@ -894,7 +886,7 @@ class ObservationHandlerCallbacks:
 
             station_ids_in_bbox = filtered_stations.index.tolist()
 
-            station_timeseries = self.process_station_timeseries_data_for_stations(
+            station_timeseries = self.process_station_timeseries_data(
                 self.parent.observation_folder_path, station_ids_in_bbox
             )
 
@@ -905,6 +897,7 @@ class ObservationHandlerCallbacks:
             )
 
             self._create_unified_observation_markers(filtered_stations)
+            self._setup_obs_time_navigation()
 
             if self.parent.ui:
                 total_observations = sum(
@@ -1193,6 +1186,10 @@ class ObservationHandlerCallbacks:
 
         if hasattr(self.parent.map_handler, "clear_observation_markers"):
             self.parent.map_handler.clear_observation_markers()
+        if self.parent.ui and "obs_colorbar" in self.parent.ui.widgets:
+            self.parent.ui.widgets["obs_colorbar"].layout.display = "none"
+        if self.parent.map_handler and hasattr(self.parent.map_handler, "hide_obs_legend"):
+            self.parent.map_handler.hide_obs_legend()
 
         error_html = self._create_simple_error_html(str(error))
         self._update_status_display(error_html)
@@ -1494,14 +1491,60 @@ class ObservationHandlerCallbacks:
             },
         }
 
+    @staticmethod
+    def _value_to_hex(value, vmin, vmax):
+        """Map a scalar value to a hex colour using the RdYlBu_r colormap."""
+        cmap = _get_rdylbu_colormap()
+        if cmap is None:
+            return "#949190"
+        denom = vmax - vmin if vmax != vmin else 1.0
+        t = max(0.0, min(1.0, (value - vmin) / denom))
+        r, g, b, _ = cmap(t)
+        return f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
+
+    @staticmethod
+    def _build_colorbar_html(vmin, vmax, unit=""):
+        """Return an HTML snippet showing a horizontal colourbar legend."""
+        try:
+            cmap = _get_rdylbu_colormap()
+            if cmap is None:
+                raise ValueError("RdYlBu_r colormap unavailable")
+            n = 20
+            stops = []
+            for i in range(n + 1):
+                t = i / n
+                r, g, b, _ = cmap(t)
+                pct = round(t * 100)
+                stops.append(f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x} {pct}%")
+            gradient = ", ".join(stops)
+        except Exception:
+            gradient = "#0000ff 0%, #ff0000 100%"
+        label_lo = f"{vmin:.1f}"
+        label_hi = f"{vmax:.1f}"
+        unit_str = f" {unit}" if unit else ""
+        return (
+            f'<div style="margin:4px 0;font-size:0.8em;color:#444;">'
+            f'<span style="font-weight:bold;">Station mean values{unit_str}</span><br>'
+            f'<div style="display:flex;align-items:center;gap:4px;margin-top:3px;">'
+            f'<span>{label_lo}</span>'
+            f'<div style="flex:1;height:10px;border-radius:4px;'
+            f'background:linear-gradient(to right,{gradient});'
+            f'border:1px solid #ccc;"></div>'
+            f'<span>{label_hi}</span>'
+            f'</div></div>'
+        )
+
     def _create_unified_observation_markers(self, filtered_stations_gdf):
-        """Create observation markers using unified map handler.
+        """Create observation markers coloured by mean observation value.
 
         Args:
             filtered_stations_gdf: Filtered stations GeoDataFrame
 
         """
         try:
+            import ipyleaflet as _ipl
+            import ipywidgets as _w
+
             if (
                 not self.parent.map_handler
                 or filtered_stations_gdf is None
@@ -1511,20 +1554,90 @@ class ObservationHandlerCallbacks:
 
             self.parent.map_handler.clear_observation_markers()
 
+            # Compute per-station mean observation value for colour mapping
+            timeseries_data = (
+                self.parent.current_data.get("observations", {}).get("timeseries_data", {})
+                if hasattr(self.parent, "current_data") and self.parent.current_data
+                else {}
+            )
+            station_means = {}
+            for sid, data in timeseries_data.items():
+                values = [
+                    entry["value"]
+                    for entry in data.get("timeseries", [])
+                    if entry.get("value") is not None
+                ]
+                if values:
+                    station_means[sid] = sum(values) / len(values)
+
+            has_values = bool(station_means)
+            if has_values:
+                # Clamp colour range to visible stations only for better contrast
+                visible_means = {sid: v for sid, v in station_means.items() if sid in filtered_stations_gdf.index}
+                scale_source = visible_means if visible_means else station_means
+                vmin = min(scale_source.values())
+                vmax = max(scale_source.values())
+            else:
+                vmin = vmax = 0.0
+
+            markers = []
             for station_id, station_info in filtered_stations_gdf.iterrows():
+                lat = station_info["latitude"]
+                lon = station_info["longitude"]
+                mean_val = station_means.get(station_id)
+
+                if mean_val is not None and has_values and vmin != vmax:
+                    fill_color = self._value_to_hex(mean_val, vmin, vmax)
+                    val_str = f"{mean_val:.2f}"
+                else:
+                    fill_color = "#949190"
+                    val_str = "N/A" if mean_val is None else f"{mean_val:.2f}"
+
                 marker_data = {
                     "station_id": station_id,
-                    "lat": station_info["latitude"],
-                    "lon": station_info["longitude"],
+                    "lat": lat,
+                    "lon": lon,
                     "type": "observation",
-                    "color": "#949190",
-                    "radius": 8,
+                    "color": fill_color,
                     "popup_info": self._create_observation_popup_info(
-                        station_id, station_info
+                        station_id, station_info, mean_val=mean_val,
                     ),
                 }
+                self.parent.map_handler.add_observation_marker(
+                    marker_data, on_click=None
+                )
+                marker = self.parent.map_handler.observation_markers.get(station_id)
+                if marker is not None:
+                    markers.append(marker)
 
-                self.parent.map_handler.add_observation_marker(marker_data)
+            # Atomically replace the observation layer group
+            new_layer_group = _ipl.LayerGroup(
+                layers=markers, name="observation_stations"
+            )
+            self.parent.map_handler.map_widget.substitute_layer(
+                self.parent.map_handler.observation_layer_group, new_layer_group
+            )
+            self.parent.map_handler.observation_layer_group = new_layer_group
+
+            # Show/hide colorbar legend
+            if (
+                self.parent.ui
+                and "obs_colorbar" in self.parent.ui.widgets
+            ):
+                if has_values and vmin != vmax:
+                    self.parent.ui.widgets["obs_colorbar"].value = self._build_colorbar_html(vmin, vmax)
+                    self.parent.ui.widgets["obs_colorbar"].layout.display = ""
+                else:
+                    self.parent.ui.widgets["obs_colorbar"].layout.display = "none"
+
+            # Also update map legend overlay
+            if self.parent.map_handler:
+                if has_values and vmin != vmax:
+                    obs_meta = self.parent.current_data.get("observations", {}).get("metadata", {})
+                    unit = obs_meta.get("parameter", "")
+                    self.parent.map_handler.update_obs_legend(vmin, vmax, unit=unit)
+                else:
+                    self.parent.map_handler.hide_obs_legend()
 
         except Exception as e:
             print(f"Error creating unified observation markers: {e}")
@@ -1536,12 +1649,13 @@ class ObservationHandlerCallbacks:
                     permanent=True,
                 )
 
-    def _create_observation_popup_info(self, station_id, station_info):
+    def _create_observation_popup_info(self, station_id, station_info, mean_val=None):
         """Create popup information for observation station.
 
         Args:
             station_id: Station ID
             station_info: Station information
+            mean_val: Mean observation value (optional)
 
         Returns:
             str: HTML popup content
@@ -1565,14 +1679,17 @@ class ObservationHandlerCallbacks:
                 ][station_id]
                 data_count = len(station_data.get("timeseries", []))
 
+            val_line = ""
+            if mean_val is not None:
+                val_line = f'<p style="margin: 2px 0; font-size: 1.1em;"><strong>Mean value:</strong> <span style="color:#E65100;">{mean_val:.2f}</span></p>'
+
             popup_html = f"""
                 <div style="width: 280px; color: black;">
                     <h4 style="margin-bottom: 10px;">Obs Station {station_id}</h4>
+                    {val_line}
                     <p style="margin: 2px 0;"><strong>Location:</strong> {station_info["latitude"]:.3f}°N, {station_info["longitude"]:.3f}°E</p>
                     {f'<p style="margin: 2px 0;"><strong>Elevation:</strong> {elevation:.1f} m</p>' if has_elevation else ""}
                     <p style="margin: 2px 0;"><strong>Data Points:</strong> {data_count}</p>
-                    <p style="margin: 2px 0; color: #FF6B35;"><strong>Type:</strong> Observation</p>
-                    <p style="margin: 2px 0; font-size: 0.9em;"><em>Available for analysis</em></p>
                 </div>
             """
 
@@ -1581,3 +1698,138 @@ class ObservationHandlerCallbacks:
         except Exception as e:
             print(f"Error creating popup info: {e}")
             return f"<div>Station {station_id}</div>"
+
+    # ------------------------------------------------------------------
+    # Time-step navigation for observation markers
+    # ------------------------------------------------------------------
+
+    def _setup_obs_time_navigation(self):
+        """Collect unique sorted time steps from observation data and show nav buttons."""
+        if not self.parent.ui:
+            return
+
+        timeseries_data = (
+            self.parent.current_data.get("observations", {}).get("timeseries_data", {})
+            if hasattr(self.parent, "current_data") and self.parent.current_data
+            else {}
+        )
+        if not timeseries_data:
+            return
+
+        all_times = set()
+        for data in timeseries_data.values():
+            for entry in data.get("timeseries", []):
+                dt = entry.get("datetime")
+                if dt is not None:
+                    all_times.add(dt)
+
+        self._obs_time_steps = sorted(all_times)
+        if not self._obs_time_steps:
+            return
+
+        self._obs_time_index = 0
+
+        # Compute fixed min/max from first time step
+        values_at_first = self._get_station_values_at_time(self._obs_time_steps[0])
+        vals = [v for v in values_at_first.values() if v is not None]
+        if vals:
+            self._obs_fixed_vmin = min(vals)
+            self._obs_fixed_vmax = max(vals)
+        else:
+            self._obs_fixed_vmin = 0
+            self._obs_fixed_vmax = 1
+
+        # Wire up buttons once
+        if not self._obs_time_nav_setup:
+            self.parent.ui.widgets["obs_time_prev"].on_click(self._on_obs_time_prev)
+            self.parent.ui.widgets["obs_time_next"].on_click(self._on_obs_time_next)
+            self._obs_time_nav_setup = True
+
+        # Show nav widgets (HBox and all children)
+        self.parent.ui.widgets["obs_time_nav"].layout.display = "flex"
+        self.parent.ui.widgets["obs_time_prev"].layout.display = "inline-flex"
+        self.parent.ui.widgets["obs_time_next"].layout.display = "inline-flex"
+        self.parent.ui.widgets["obs_time_label"].layout.display = "inline-block"
+        self._update_obs_time_label()
+        self._color_markers_at_current_time()
+
+    def _get_station_values_at_time(self, target_dt):
+        """Return {station_id: value} for the given datetime."""
+        timeseries_data = (
+            self.parent.current_data.get("observations", {}).get("timeseries_data", {})
+        )
+        result = {}
+        for sid, data in timeseries_data.items():
+            val = None
+            for entry in data.get("timeseries", []):
+                if entry.get("datetime") == target_dt:
+                    val = entry.get("value")
+                    break
+            result[sid] = val
+        return result
+
+    def _on_obs_time_prev(self, _btn):
+        """Handle previous time step button click."""
+        if self._obs_time_index > 0:
+            self._obs_time_index -= 1
+            self._update_obs_time_label()
+            self._color_markers_at_current_time()
+
+    def _on_obs_time_next(self, _btn):
+        """Handle next time step button click."""
+        if self._obs_time_index < len(self._obs_time_steps) - 1:
+            self._obs_time_index += 1
+            self._update_obs_time_label()
+            self._color_markers_at_current_time()
+
+    def _update_obs_time_label(self):
+        """Update the time step label."""
+        if not self._obs_time_steps:
+            return
+        dt = self._obs_time_steps[self._obs_time_index]
+        total = len(self._obs_time_steps)
+        idx = self._obs_time_index + 1
+        label = dt.strftime("%Y-%m-%d %H:%M") if hasattr(dt, "strftime") else str(dt)
+        self.parent.ui.widgets["obs_time_label"].value = (
+            f"<span style='font-size:12px;color:#333;'><b>{label}</b> ({idx}/{total})</span>"
+        )
+
+    def _color_markers_at_current_time(self):
+        """Re-color observation markers for the current time step."""
+        if not self._obs_time_steps:
+            return
+
+        import ipyleaflet as _ipl
+        import ipywidgets as _widgets
+
+        target_dt = self._obs_time_steps[self._obs_time_index]
+        station_values = self._get_station_values_at_time(target_dt)
+        label = target_dt.strftime("%Y-%m-%d %H:%M") if hasattr(target_dt, "strftime") else str(target_dt)
+
+        vmin = self._obs_fixed_vmin
+        vmax = self._obs_fixed_vmax
+
+        for sid, marker in self.parent.map_handler.observation_markers.items():
+            val = station_values.get(sid)
+            if val is not None and vmin != vmax:
+                color = self._value_to_hex(val, vmin, vmax)
+            else:
+                color = "#949190"
+            marker.color = color
+            marker.fill_color = color
+
+            # Update popup to show value at this time step
+            val_str = f"{val:.2f}" if val is not None else "N/A"
+            popup_html = (
+                f'<div style="width:200px;color:black;">'
+                f'<b>Station {sid}</b><br>'
+                f'<span style="font-size:1.1em;color:#E65100;"><b>{val_str}</b></span><br>'
+                f'<span style="font-size:0.85em;color:#666;">{label}</span>'
+                f'</div>'
+            )
+            marker.popup = _ipl.Popup(
+                child=_widgets.HTML(popup_html),
+                close_button=False,
+                auto_close=True,
+                max_width=220,
+            )

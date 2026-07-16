@@ -249,17 +249,3 @@ class StationCreator:
         gdf.set_index("stnid", inplace=True)
 
         return gdf
-
-    def create_station_info_df(self, station_metadata):
-        """Convert station metadata dictionary to a pandas DataFrame.
-
-        Args:
-            station_metadata (dict): Dictionary containing station metadata with station IDs as keys.
-
-        Returns:
-            pandas.DataFrame: DataFrame with metadata fields as columns.
-
-        """
-        metadata_df = pd.DataFrame.from_dict(station_metadata, orient="index")
-        metadata_df.index.name = "stnid"
-        return metadata_df

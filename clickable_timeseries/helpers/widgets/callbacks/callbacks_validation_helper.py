@@ -74,13 +74,42 @@ class ValidationHelper:
                     if common_end is None or model_end < common_end:
                         common_end = model_end
 
-                if common_start >= common_end:
+                # Only flag a true non-overlap (A ends before B starts).
+                # When common_start == common_end all models share a single
+                # degenerate timestamp (e.g. only step=0 was retrieved) which
+                # IS a valid overlap point — don't block plotting for that.
+                if common_start > common_end:
                     return True
 
             return False
 
         except Exception as e:
             print(f"❌ Error checking for time period mismatches: {e}")
+            return False
+
+    def _check_for_limited_coverage(self):
+        """Return True when every model has a single-step (zero-duration) dataset.
+
+        This is a softer check than the mismatch — it does not block plotting
+        but lets the caller show an informational warning to the user.
+        """
+        try:
+            for _point_id, point_data in self.multi_point_data.items():
+                forecast_data = point_data.get("forecast_data", {})
+                forecast_models = {
+                    k: v
+                    for k, v in forecast_data.items()
+                    if k != "Observations" and v is not None and not v.empty
+                }
+                if not forecast_models:
+                    continue
+                # If ANY model spans more than a single timestamp, coverage is fine.
+                for _model_name, forecast_df in forecast_models.items():
+                    if forecast_df.index.min() != forecast_df.index.max():
+                        return False
+            return True
+        except Exception as e:
+            print(f"❌ Error checking for limited coverage: {e}")
             return False
 
     def _show_time_period_mismatch_error(self):

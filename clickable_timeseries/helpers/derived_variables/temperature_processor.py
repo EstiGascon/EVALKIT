@@ -208,50 +208,6 @@ class TemperatureProcessor:
             print(f"Error extracting time info: {e}")
             return {}
 
-    def _extract_coordinate_info(self, field):
-        """Extract coordinate metadata from a temperature field.
-
-        Args:
-            field: Temperature field object.
-
-        Returns:
-            Dictionary with coordinate keys and their values, including grid and geolocation info.
-
-        """
-        try:
-            metadata = field.metadata()
-
-            coord_info = {}
-            coord_keys = [
-                "latitudeOfFirstGridPointInDegrees",
-                "longitudeOfFirstGridPointInDegrees",
-                "latitudeOfLastGridPointInDegrees",
-                "longitudeOfLastGridPointInDegrees",
-                "iDirectionIncrementInDegrees",
-                "jDirectionIncrementInDegrees",
-                "Ni",
-                "Nj",
-            ]
-
-            for key in coord_keys:
-                if hasattr(metadata, "get"):
-                    value = metadata.get(key)
-                    if value is not None:
-                        coord_info[key] = value
-                else:
-                    try:
-                        value = metadata(key)
-                        if value is not None:
-                            coord_info[key] = value
-                    except Exception:
-                        continue
-
-            return coord_info
-
-        except Exception as e:
-            print(f"Error extracting coordinate info: {e}")
-            return {}
-
     def _calculate_daily_extremes(  # noqa: PLR0912, PLR0915
         self, temp_data, model_name: str, temp_param: str, extreme_type: str
     ):
@@ -348,7 +304,6 @@ class TemperatureProcessor:
                     raise ValueError(f"Unknown extreme type: {extreme_type}")
 
                 representative_record = window_records[extreme_idx]
-                group_steps[extreme_idx]
 
                 extreme_time = representative_record["time"].copy()
                 extreme_time["aggregation"] = f"24h_{extreme_type}"
@@ -716,34 +671,3 @@ class TemperatureProcessor:
         except Exception as e:
             print(f"Error creating time index: {e}")
             return pd.Timestamp.now()
-
-    def _extract_base_datetime_from_field(self, field):
-        """Extract base date and time from a temperature field's metadata.
-
-        Args:
-            field: Dataset field object containing metadata
-
-        Returns:
-            Tuple containing:
-                date: Base date extracted from metadata, or None if unavailable
-                time: Base time extracted from metadata, or None if unavailable
-
-        """
-        try:
-            metadata = field.metadata()
-
-            def get_metadata_value(meta, key):
-                if hasattr(meta, "get"):
-                    return meta.get(key)
-                try:
-                    return meta(key)
-                except Exception:
-                    return None
-
-            date = get_metadata_value(metadata, "date")
-            time = get_metadata_value(metadata, "time")
-
-            return date, time
-        except Exception as e:
-            print(f"Error extracting base datetime: {e}")
-            return None, None

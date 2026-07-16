@@ -493,7 +493,7 @@ class SurfaceVariableCalculatorUI:
 
                 elif calc_type == "wind_speed":
                     u_wind = (
-                        dataset.sel(param="10u")
+                        dataset.sel(param=["10u", "u10"])
                         if hasattr(dataset, "sel")
                         else [
                             field
@@ -502,7 +502,7 @@ class SurfaceVariableCalculatorUI:
                         ]
                     )
                     v_wind = (
-                        dataset.sel(param="10v")
+                        dataset.sel(param=["10v", "v10"])
                         if hasattr(dataset, "sel")
                         else [
                             field
@@ -572,11 +572,6 @@ class SurfaceVariableCalculatorUI:
                 self.widgets["show_calculated_btn"].layout.display = "block"
                 self.widgets["clear_all_btn"].disabled = False
                 self.widgets["clear_all_btn"].layout.display = "block"
-
-                if calc_type == "wind_speed":
-                    current_calc_type = self.widgets["calc_type"].value
-                    if current_calc_type == "extremes":
-                        self.setup_extremes_calculation(dataset)
 
             except Exception as e:
                 clear_output()
@@ -807,7 +802,7 @@ def create_surface_calculator(weather_callbacks):
         weather_callbacks: WeatherCallbacks instance containing downloaded data
 
     Returns:
-        SurfaceVariableCalculatorWidget instance
+        SurfaceVariableCalculatorUI instance
 
     """
     calculator = SurfaceVariableCalculatorUI(weather_callbacks)

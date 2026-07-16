@@ -23,9 +23,6 @@ class UILayoutManager:
 
         """
         self.widgets = widgets_dict
-        self.plot_configs = plot_configs
-        self.use_cases = use_cases
-        self.map_handler = map_handler
         self.widget_config = widget_config
         self.data_alert_container = widgets.VBox([])
         self.observation_alert_container = widgets.VBox([])
@@ -241,7 +238,9 @@ class UILayoutManager:
                 "<h5 style='color: #50DEA3; margin-bottom: 5px;'>Model Selection</h5>"
             )
         )
-        mars_config_widgets.append(self.widgets["model_class"])
+        mars_config_widgets.append(self.widgets["model_selection_box"])
+        if "custom_experiment_box" in self.widgets:
+            mars_config_widgets.append(self.widgets["custom_experiment_box"])
 
         mars_config_widgets.append(
             widgets.HTML(
@@ -505,6 +504,8 @@ class UILayoutManager:
                 data_source_row,
                 browse_section,
                 retrieve_section,
+                self.widgets["obs_colorbar"],
+                self.widgets["obs_time_nav"],
             ]
         )
         self.browse_section = browse_section
@@ -692,6 +693,30 @@ class UILayoutManager:
             layout=widgets.Layout(width="45%"),
         )
 
+        precip_accumulation_selector = widgets.Dropdown(
+            options=[
+                ("3-hourly", 3),
+                ("6-hourly", 6),
+                ("12-hourly", 12),
+                ("24-hourly", 24),
+                ("48-hourly", 48),
+                ("72-hourly", 72),
+                ("120-hourly", 120),
+            ],
+            value=24,
+            description="",
+            style={"description_width": "initial"},
+            layout=widgets.Layout(width="160px"),
+        )
+
+        precip_accumulation_container = widgets.VBox(
+            [
+                widgets.HTML("<strong>Precip Accumulation:</strong>"),
+                precip_accumulation_selector,
+            ],
+            layout=widgets.Layout(width="40%", display="none"),
+        )
+
         palette_container = widgets.VBox(
             [
                 widgets.HTML("<strong>Palette:</strong>"),
@@ -710,6 +735,7 @@ class UILayoutManager:
         second_row = widgets.HBox(
             [
                 step_container,
+                precip_accumulation_container,
                 palette_container,
             ],
             layout=widgets.Layout(width="100%", justify_content="space-between"),
@@ -746,10 +772,12 @@ class UILayoutManager:
             "parameter_selector": parameter_selector,
             "unit_selector": unit_selector,
             "step_selector": step_selector,
+            "precip_accumulation_selector": precip_accumulation_selector,
             "palette_selector": palette_selector,
             "parameter_container": parameter_container,
             "unit_container": unit_container,
             "step_container": step_container,
+            "precip_accumulation_container": precip_accumulation_container,
             "palette_container": palette_container,
             "clear_btn": clear_btn,
             "refresh_btn": refresh_btn,
@@ -798,7 +826,10 @@ class UILayoutManager:
             widgets.HTML(
                 "<h5 style='color: #50DEA3; margin-bottom: 5px;'>Forecast Steps</h5>"
             ),
-            self.widgets["steps"],
+            widgets.HBox(
+                [self.widgets["steps"], self.widgets["step_frequency"]],
+                layout=widgets.Layout(align_items="center"),
+            ),
         ]
 
         if "steps_display" in self.widgets:

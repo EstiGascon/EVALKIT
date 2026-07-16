@@ -30,11 +30,27 @@ class ForecastDataProcessor:
             bool: True if successful, False otherwise
 
         """
-        success = True
+        # Reset all cached state before processing a new parameter so that
+        # stale data from a previous parameter selection cannot leak through.
+        # Without this, if a model's dataset does not contain the requested
+        # parameter, process_single_dataset returns False without touching
+        # self.datasets or self.loaded_models, leaving the old (wrong)
+        # parameter data in the cache and producing incorrect plots.
+        self.datasets.clear()
+        self.loaded_models.clear()
+        self.forecast_data.clear()
+        self.station_dataframes.clear()
+        self.grid_coordinates.clear()
+        self.station_distances.clear()
+        self.current_param = None
+
+        success = False  # True only if at least one model succeeds
 
         for model, ds in datasets.items():
-            if not self.process_single_dataset(ds, model, param):
-                success = False
+            if self.process_single_dataset(ds, model, param):
+                success = True
+            # models that fail are simply absent from self.datasets —
+            # no stale data is left behind.
 
         return success
 
@@ -87,8 +103,6 @@ class ForecastDataProcessor:
 
             latlon = param_dataset.to_latlon()
             self.grid_coordinates[model] = {"lat": latlon["lat"], "lon": latlon["lon"]}
-
-            steps = param_dataset.metadata("step")
 
             return True
 

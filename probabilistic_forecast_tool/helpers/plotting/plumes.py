@@ -65,13 +65,8 @@ class PlumesPlotting:
         hour = int(time_str.split(":")[0])
         return date_obj.replace(hour=hour)
 
-    def _get_color_scheme_quantile(self, parameter: str) -> dict:
+    def _get_color_scheme_quantile(self) -> dict:
         """Get green color scheme for quantile shading.
-
-        Parameters
-        ----------
-        parameter : str
-            Parameter name (unused, kept for API consistency)
 
         Returns
         -------
@@ -145,16 +140,7 @@ class PlumesPlotting:
         """
         quantile_data = self._calculate_quantile_shading(ensemble_ts)
 
-        date_str = metadata["date"]
-        if "-" in date_str:
-            forecast_datetime = datetime.strptime(
-                f"{date_str.replace('-', '')}{metadata['time'].split(':')[0]}",
-                "%Y%m%d%H",
-            )
-        else:
-            forecast_datetime = datetime.strptime(
-                f"{date_str}{metadata['time'].split(':')[0]}", "%Y%m%d%H"
-            )
+        forecast_datetime = self._parse_datetime_with_hour(metadata["date"], metadata["time"])
 
         shading_bands = [
             {
@@ -199,9 +185,6 @@ class PlumesPlotting:
             )
 
             middle_values = (band["upper"] + band["lower"]) / 2
-            forecast_steps = [
-                int((vt - forecast_datetime).total_seconds() / 3600) for vt in time_axis
-            ]
 
             hover_template = (
                 f"<b>{band['name']}</b><br>"
@@ -221,7 +204,7 @@ class PlumesPlotting:
                     showlegend=False,
                     hovertemplate=hover_template,
                     customdata=list(
-                        zip(band["lower"], band["upper"], forecast_steps, strict=False)
+                        zip(band["lower"], band["upper"], strict=False)
                     ),
                 )
             )
@@ -264,7 +247,16 @@ class PlumesPlotting:
             Extracted data
 
         """
-        xr_data = data.to_xarray() if hasattr(data, "to_xarray") else data
+        if hasattr(data, "to_xarray"):
+            try:
+                xr_data = data.to_xarray()
+            except NotImplementedError:
+                # earthkit >=0.17: MaskFieldList.to_xarray() is abstract.
+                # Convert to concrete SimpleFieldList first.
+                from earthkit.data import FieldList as _EkFL
+                xr_data = _EkFL.from_fields(list(data)).to_xarray()
+        else:
+            xr_data = data
 
         if hasattr(data, "to_latlon"):
             latlon = data.to_latlon()
@@ -278,6 +270,9 @@ class PlumesPlotting:
             lon_coord = xr_data.coords.get("longitude")
             if lon_coord is None:
                 lon_coord = xr_data.coords.get("lon")
+
+            if lat_coord is None or lon_coord is None:
+                raise ValueError("Cannot find latitude/longitude coordinates in data")
 
             if lat_coord.ndim == 1 and lon_coord.ndim == 1:
                 lats = lat_coord.values
@@ -315,7 +310,9 @@ class PlumesPlotting:
                         {lat_coord.dims[0]: lat_idx, lat_coord.dims[1]: lon_idx}
                     )
 
-        if len(point_data.data_vars) > 0:
+        # point_data may be an xr.Dataset (from earthkit to_xarray) or an
+        # xr.DataArray (e.g. computed ws). Handle both without AttributeError.
+        if hasattr(point_data, "data_vars") and len(point_data.data_vars) > 0:
             return point_data[list(point_data.data_vars)[0]]
 
         return point_data
@@ -390,8 +387,8 @@ class PlumesPlotting:
 
         if category == "temperature" and target_unit.lower() == "celsius":
             return obs_values - 273.15
-        elif category == "precipitation" and target_unit.lower() == "mm":
-            return obs_values * 1000
+        # Observation precipitation values come from VINO already in mm;
+        # no unit conversion is needed regardless of target_unit.
 
         return obs_values
 
@@ -409,16 +406,7 @@ class PlumesPlotting:
             (start_time, end_time)
 
         """
-        date_str = metadata["date"]
-        if "-" in date_str:
-            init_datetime = datetime.strptime(
-                f"{date_str.replace('-', '')}{metadata['time'].split(':')[0]}",
-                "%Y%m%d%H",
-            )
-        else:
-            init_datetime = datetime.strptime(
-                f"{date_str}{metadata['time'].split(':')[0]}", "%Y%m%d%H"
-            )
+        init_datetime = self._parse_datetime_with_hour(metadata["date"], metadata["time"])
 
         forecast_steps = [int(step) for step in metadata["steps"]]
         start_time = init_datetime + timedelta(hours=forecast_steps[0])
@@ -489,6 +477,11 @@ class PlumesPlotting:
 
         return obs_times, converted_values
 
+    @staticmethod
+    def _is_precipitation_param(parameter: str) -> bool:
+        """Return True for accumulated precipitation parameters."""
+        return parameter in {"tp", "lsp", "cp", "sf"}
+
     def _load_and_select_data(self, data_source, parameter: str):
         """Load and select parameter from data source.
 
@@ -510,6 +503,10 @@ class PlumesPlotting:
             else data_source
         )
 
+        # ws is a derived parameter — compute it from 10u and 10v components.
+        if parameter == "ws":
+            return self._compute_wind_speed_dataset(data)
+
         if hasattr(data, "sel"):
             try:
                 return data.sel(shortName=parameter)
@@ -521,6 +518,162 @@ class PlumesPlotting:
 
         return data
 
+    def _compute_wind_speed_dataset(self, data_source):
+        """Compute 10m wind speed xarray DataArray from U/V components.
+
+        Parameters
+        ----------
+        data_source : earthkit or xarray object
+            Dataset containing 10u and 10v fields
+
+        Returns
+        -------
+        xr.DataArray
+            Wind speed DataArray
+
+        """
+        import xarray as xr  # noqa: PLC0415
+
+        if hasattr(data_source, "sel"):
+            def _sel_to_xarray(ds, param):
+                sel = ds.sel(param=param)
+                try:
+                    return sel.to_xarray()
+                except NotImplementedError:
+                    from earthkit.data import FieldList as _EkFL
+                    return _EkFL.from_fields(list(sel)).to_xarray()
+            u_xr = _sel_to_xarray(data_source, "10u")
+            v_xr = _sel_to_xarray(data_source, "10v")
+        else:
+            xr_full = (
+                data_source
+                if isinstance(data_source, xr.Dataset)
+                else data_source.to_xarray()
+            )
+            u_xr = xr_full[["10u"]] if "10u" in xr_full else xr_full
+            v_xr = xr_full[["10v"]] if "10v" in xr_full else xr_full
+
+        u_da = u_xr[list(u_xr.data_vars)[0]] if isinstance(u_xr, xr.Dataset) else u_xr
+        v_da = v_xr[list(v_xr.data_vars)[0]] if isinstance(v_xr, xr.Dataset) else v_xr
+
+        ws = np.sqrt(u_da**2 + v_da**2)
+        ws.name = "ws"
+        return ws
+
+    def _extract_parameter_at_point(
+        self, data_source, parameter: str, lat: float, lon: float
+    ) -> np.ndarray:
+        """Extract parameter time series at nearest gridpoint from earthkit data.
+
+        For large datasets on reduced Gaussian grids, avoids creating massive
+        intermediate xarray datasets by extracting gridpoint values directly
+        from the earthkit FieldList.
+
+        Parameters
+        ----------
+        data_source : earthkit FieldList or xarray object
+            Input data
+        parameter : str
+            Parameter short name (e.g. '2t', 'tp')
+        lat : float
+            Target latitude
+        lon : float
+            Target longitude
+
+        Returns
+        -------
+        np.ndarray
+            Values at the nearest gridpoint. For ensemble data the shape is
+            (steps, members); for single-member data the shape is (steps,).
+
+        """
+        if parameter == "ws":
+            u_vals = self._extract_parameter_at_point(data_source, "10u", lat, lon)
+            v_vals = self._extract_parameter_at_point(data_source, "10v", lat, lon)
+            return np.sqrt(u_vals**2 + v_vals**2)
+
+        # Non-earthkit data: fall back to full xarray path
+        import xarray as xr  # noqa: PLC0415
+        if not hasattr(data_source, "sel") or isinstance(
+            data_source, xr.Dataset | xr.DataArray
+        ):
+            data = self._load_and_select_data(data_source, parameter)
+            point = self._extract_nearest_gridpoint(data, lat, lon)
+            return np.squeeze(point.values) if hasattr(point, "values") else np.squeeze(point)
+
+        # Select parameter from FieldList
+        selected = data_source.sel(param=parameter)
+        if len(selected) == 0:
+            selected = data_source.sel(shortName=parameter)
+        if len(selected) == 0:
+            # Manual fallback: iterate fields and match by shortName metadata
+            manual_fields = []
+            for f in data_source:
+                try:
+                    sn = f.metadata("shortName")
+                    if sn == parameter:
+                        manual_fields.append(f)
+                except Exception:
+                    pass
+            if manual_fields:
+                from earthkit.data import FieldList as _EkFL
+                selected = _EkFL.from_fields(manual_fields)
+        if len(selected) == 0:
+            # Collect diagnostic info for debugging
+            ds_type = type(data_source).__name__
+            n_fields = len(data_source)
+            found_params = set()
+            for f in data_source:
+                try:
+                    found_params.add(f.metadata("shortName"))
+                except Exception:
+                    found_params.add("<unknown>")
+            raise ValueError(
+                f"Parameter '{parameter}' not found in dataset. "
+                f"Dataset type: {ds_type}, fields: {n_fields}, "
+                f"available params: {sorted(found_params)}"
+            )
+
+        # Find nearest gridpoint index from the first field
+        first_field = selected[0]
+        latlon = first_field.to_latlon()
+        idx, _ = nearest_point_haversine(
+            [lat, lon], (latlon["lat"], latlon["lon"])
+        )
+
+        # Collect (step, number) → value for every field
+        step_set = set()
+        number_set = set()
+        records = {}
+        for field in selected:
+            step = field.metadata("step")
+            md = field.metadata()
+            number = md.get("number", None)
+            val = float(field.values[idx])
+            step_set.add(step)
+            if number is not None:
+                number_set.add(number)
+            records[(step, number)] = val
+
+        unique_steps = sorted(step_set)
+
+        if number_set:
+            unique_numbers = sorted(number_set)
+            # Shape: (steps, members) — expected by create_plumes_plot
+            data = np.full((len(unique_steps), len(unique_numbers)), np.nan)
+            step_map = {s: i for i, s in enumerate(unique_steps)}
+            num_map = {n: i for i, n in enumerate(unique_numbers)}
+            for (step, number), val in records.items():
+                if number is not None:
+                    data[step_map[step], num_map[number]] = val
+            return data
+        else:
+            data = np.full(len(unique_steps), np.nan)
+            step_map = {s: i for i, s in enumerate(unique_steps)}
+            for (step, _), val in records.items():
+                data[step_map[step]] = val
+            return data
+
     def create_plumes_plot(
         self,
         forecast_data: dict,
@@ -530,6 +683,8 @@ class PlumesPlotting:
         target_unit: str = None,
         figsize: tuple[int, int] = (1200, 600),
         forecast_type: str = "cf",
+        model_class: str = "",
+        step_frequency: int = None,
     ) -> go.Figure:
         """Create interactive plume diagram with ensemble spread.
 
@@ -574,19 +729,19 @@ class PlumesPlotting:
 
         metadata = forecast_data[forecast_type]["metadata"]
 
-        date_str = metadata["date"]
-        if "-" in date_str:
-            init_datetime = datetime.strptime(
-                f"{date_str.replace('-', '')}{metadata['time'].split(':')[0]}",
-                "%Y%m%d%H",
-            )
-        else:
-            init_datetime = datetime.strptime(
-                f"{date_str}{metadata['time'].split(':')[0]}", "%Y%m%d%H"
-            )
+        init_datetime = self._parse_datetime_with_hour(metadata["date"], metadata["time"])
 
         forecast_steps = [int(step) for step in metadata["steps"]]
         time_axis = [init_datetime + timedelta(hours=step) for step in forecast_steps]
+
+        # Compute step frequency filter indices on the ORIGINAL steps
+        if step_frequency and step_frequency > 1:
+            keep_idx = [i for i, s in enumerate(forecast_steps) if s % step_frequency == 0]
+            print(f"[DEBUG create_plumes_plot] keep_idx kept {len(keep_idx)}/{len(forecast_steps)} steps")
+        else:
+            keep_idx = None
+        # n_orig_steps used for dimension detection before filtering
+        n_orig_steps = len(time_axis)
 
         fig = go.Figure()
 
@@ -594,36 +749,52 @@ class PlumesPlotting:
         control_ts = None
         if forecast_type in forecast_data:
             control_dataset = forecast_data[forecast_type]["dataset"]
-            cf_data = self._load_and_select_data(control_dataset, parameter)
-            cf_point = self._extract_nearest_gridpoint(cf_data, lat, lon)
+            control_values = self._extract_parameter_at_point(
+                control_dataset, parameter, lat, lon
+            )
 
-            control_values = np.squeeze(cf_point.values)
+            control_values = np.squeeze(control_values)
             if control_values.ndim > 1:
                 control_values = control_values.flatten()
 
-            control_values = control_values[: len(time_axis)]
-            time_axis = time_axis[: len(control_values)]
+            # Truncate to available time steps then apply step frequency filter
+            control_values = control_values[:n_orig_steps]
+            if keep_idx is not None:
+                valid_idx = [i for i in keep_idx if i < len(control_values)]
+                control_values = control_values[valid_idx]
+                time_axis_ctrl = [time_axis[i] for i in valid_idx]
+            else:
+                time_axis_ctrl = time_axis[:len(control_values)]
+            # Use filtered time_axis going forward
+            time_axis = time_axis_ctrl
 
             control_ts, _ = self.styling_config.transform_data_and_levels(
-                control_values, parameter, [], target_unit
+                control_values, parameter, [], target_unit,
+                model_class=model_class,
             )
+
+        elif keep_idx is not None:
+            # No control forecast but still need to filter time_axis
+            time_axis = [time_axis[i] for i in keep_idx if i < len(time_axis)]
 
         # Process ensemble forecast
         ensemble_ts = None
         ensemble_members_count = 0
         if "pf" in forecast_data:
             pf_dataset = forecast_data["pf"]["dataset"]
-            pf_data = self._load_and_select_data(pf_dataset, parameter)
-            pf_point = self._extract_nearest_gridpoint(pf_data, lat, lon)
+            ensemble_values = self._extract_parameter_at_point(
+                pf_dataset, parameter, lat, lon
+            )
 
-            ensemble_values = np.squeeze(pf_point.values)
+            ensemble_values = np.squeeze(ensemble_values)
 
             # Ensure shape is [time_steps, ensemble_members]
+            # Use n_orig_steps for dimension detection (pre-filter count)
             if ensemble_values.ndim == 2:
                 # Check which dimension is time
-                if ensemble_values.shape[0] == len(time_axis):
+                if ensemble_values.shape[0] == n_orig_steps:
                     ensemble_members_count = ensemble_values.shape[1]
-                elif ensemble_values.shape[1] == len(time_axis):
+                elif ensemble_values.shape[1] == n_orig_steps:
                     ensemble_values = ensemble_values.T
                     ensemble_members_count = ensemble_values.shape[1]
                 else:
@@ -635,8 +806,14 @@ class PlumesPlotting:
                 ensemble_values = ensemble_values.reshape(-1, 1)
                 ensemble_members_count = 1
 
+            # Apply step frequency filter to ensemble (first dim is time)
+            if keep_idx is not None:
+                valid_idx = [i for i in keep_idx if i < ensemble_values.shape[0]]
+                ensemble_values = ensemble_values[valid_idx]
+
             ensemble_ts, _ = self.styling_config.transform_data_and_levels(
-                ensemble_values, parameter, [], target_unit
+                ensemble_values, parameter, [], target_unit,
+                model_class=model_class,
             )
 
         # Process observations
@@ -663,11 +840,11 @@ class PlumesPlotting:
 
         # Add quantile shading
         if ensemble_ts is not None and ensemble_ts.shape[1] > 1:
-            colors = self._get_color_scheme_quantile(parameter)
+            colors = self._get_color_scheme_quantile()
             self._add_quantile_shading(fig, time_axis, ensemble_ts, colors, metadata)
 
-        # Add individual ensemble members
-        if ensemble_ts is not None:
+        # Add individual ensemble members (lines for continuous params, skip for precip)
+        if ensemble_ts is not None and not self._is_precipitation_param(parameter):
             for i in range(ensemble_members_count):
                 fig.add_trace(
                     go.Scatter(
@@ -688,40 +865,51 @@ class PlumesPlotting:
 
         # Add control forecast
         if control_ts is not None:
-            date_str = metadata["date"]
-            if "-" in date_str:
-                forecast_datetime = datetime.strptime(
-                    f"{date_str.replace('-', '')}{metadata['time'].split(':')[0]}",
-                    "%Y%m%d%H",
-                )
-            else:
-                forecast_datetime = datetime.strptime(
-                    f"{date_str}{metadata['time'].split(':')[0]}", "%Y%m%d%H"
-                )
+            forecast_datetime = self._parse_datetime_with_hour(metadata["date"], metadata["time"])
 
             customdata = [
                 int((time_point - forecast_datetime).total_seconds() / 3600)
                 for time_point in time_axis
             ]
 
-            fig.add_trace(
-                go.Scatter(
-                    x=time_axis,
-                    y=control_ts,
-                    mode="lines",
-                    line={"color": "#FF6600", "width": 3},
-                    name="Control Forecast",
-                    legendgroup="control",
-                    showlegend=True,
-                    legendrank=1,
-                    hovertemplate=(
-                        "<b>Control Forecast</b><br>"
-                        "Forecast Step: +%{customdata}h<br>"
-                        "Value: %{y:.2f}<extra></extra>"
-                    ),
-                    customdata=customdata,
+            if self._is_precipitation_param(parameter):
+                fig.add_trace(
+                    go.Bar(
+                        x=time_axis,
+                        y=control_ts,
+                        name="Control Forecast",
+                        marker_color="#FF6600",
+                        opacity=0.7,
+                        legendgroup="control",
+                        showlegend=True,
+                        legendrank=1,
+                        hovertemplate=(
+                            "<b>Control Forecast</b><br>"
+                            "Forecast Step: +%{customdata}h<br>"
+                            "Value: %{y:.2f}<extra></extra>"
+                        ),
+                        customdata=customdata,
+                    )
                 )
-            )
+            else:
+                fig.add_trace(
+                    go.Scatter(
+                        x=time_axis,
+                        y=control_ts,
+                        mode="lines",
+                        line={"color": "#FF6600", "width": 3},
+                        name="Control Forecast",
+                        legendgroup="control",
+                        showlegend=True,
+                        legendrank=1,
+                        hovertemplate=(
+                            "<b>Control Forecast</b><br>"
+                            "Forecast Step: +%{customdata}h<br>"
+                            "Value: %{y:.2f}<extra></extra>"
+                        ),
+                        customdata=customdata,
+                    )
+                )
 
         # Add observations
         if obs_times is not None and obs_values is not None:
@@ -745,22 +933,28 @@ class PlumesPlotting:
             )
 
         # Create title
-        date_str = metadata["date"]
-        if "-" in date_str:
-            formatted_date = datetime.strptime(date_str, "%Y-%m-%d").strftime(
-                "%d %B %Y"
-            )
-        else:
-            formatted_date = datetime.strptime(date_str, "%Y%m%d").strftime("%d %B %Y")
+        formatted_date = self._parse_date(metadata["date"]).strftime("%d %B %Y")
 
         location_str = f"{lat:.2f}°, {lon:.2f}°"
         if nearest_station:
             location_str += f" (Station: {nearest_station})"
 
-        title = (
-            f"Plume diagram<br>DT {metadata['time'].split(':')[0]}:00 UTC {formatted_date}<br>"
-            f"Location: {location_str}<br>{param_config['title']}"
-        )
+        model_label = ""
+        if model_class:
+            model_names = {"ifs": "IFS-ENS", "aifs": "AIFS-ENS", "custom": "Custom"}
+            model_label = model_names.get(model_class, model_class.upper())
+
+        if model_label:
+            title = (
+                f"Plume diagram ({model_label})<br>"
+                f"DT {metadata['time'].split(':')[0]}:00 UTC {formatted_date}<br>"
+                f"Location: {location_str}<br>{param_config['title']}"
+            )
+        else:
+            title = (
+                f"Plume diagram<br>DT {metadata['time'].split(':')[0]}:00 UTC {formatted_date}<br>"
+                f"Location: {location_str}<br>{param_config['title']}"
+            )
 
         # Update layout
         fig.update_layout(
@@ -785,17 +979,19 @@ class PlumesPlotting:
                 "showline": True,
                 "linecolor": "black",
                 "linewidth": 1,
+                "rangemode": "tozero" if self._is_precipitation_param(parameter) else "normal",
             },
             width=figsize[0],
             height=figsize[1],
             hovermode="x unified",
             hoverdistance=50,
+            barmode="overlay" if self._is_precipitation_param(parameter) else None,
             legend={
-                "orientation": "v",
+                "orientation": "h",
                 "yanchor": "top",
-                "y": 1,
-                "xanchor": "left",
-                "x": 1.02,
+                "y": -0.22,
+                "xanchor": "center",
+                "x": 0.5,
                 "font": {"size": 10, "family": "Arial"},
             },
             margin={"t": 100, "b": 120, "l": 80, "r": 50},

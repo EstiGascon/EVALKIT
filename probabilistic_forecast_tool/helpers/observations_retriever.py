@@ -1,20 +1,20 @@
-"""Meteorological observations retriever using STVL command-line tool with parameter-specific handling."""
+"""Meteorological observations retriever using VINO command-line tool (formerly STVL) with parameter-specific handling."""
 
 import os
 import subprocess
 
 
 class ObservationsRetriever:
-    """Retrieve meteorological observations using STVL tool with proper parameter handling."""
+    """Retrieve meteorological observations using VINO tool (formerly STVL)."""
 
-    def __init__(self, stvl_path: str = "/home/moz/bin/stvl_getgeo") -> None:
+    def __init__(self, vino_path: str = "/home/moz/bin/vino_getgeo") -> None:
         """Initialize the observations retriever.
 
         Args:
-            stvl_path: Path to the stvl_getgeo executable.
+            vino_path: Path to the vino_getgeo executable.
 
         """
-        self.stvl_path = stvl_path
+        self.vino_path = vino_path
 
         self.instantaneous_params = {
             "2t": {"times": "0 3 6 9 12 15 18 21"},
@@ -176,26 +176,31 @@ class ObservationsRetriever:
         os.makedirs(output_dir, exist_ok=True)
 
         try:
-            cmd_list = [self.stvl_path, "--sources", sources, "--parameter", parameter]
+            cmd_list = [self.vino_path, "--sources"] + sources.split()
+            cmd_list.extend(["--parameter", parameter])
 
             if uses_period and final_period:
                 cmd_list.extend(["--period", final_period])
 
-            cmd_list.extend(
-                [
-                    "--dates",
-                    f"{start_date}/to/{end_date}",
-                    "--times",
-                    final_times,
-                    "--columns",
-                    "value_0 elevation",
-                    "--outdir",
-                    output_dir,
-                    "--flattree",
-                ]
-            )
+            cmd_list.extend(["--dates", f"{start_date}/to/{end_date}"])
+            cmd_list.extend(["--times"] + final_times.split())
+            cmd_list.extend(["--columns", "value_0", "elevation"])
+            cmd_list.extend(["--outdir", output_dir, "--flattree"])
 
-            subprocess.run(cmd_list, shell=True, check=True)
+            print(f"Executing: {' '.join(cmd_list)}")
+
+            # Metview needs a writable tmp dir. If the session tmpdir is full,
+            # redirect it to $SCRATCH which has plenty of space.
+            scratch = os.environ.get("SCRATCH", "")
+            env = os.environ.copy()
+            if scratch:
+                metview_tmp = os.path.join(scratch, "metview_tmp")
+                os.makedirs(metview_tmp, exist_ok=True)
+                env["METVIEW_TMPDIR"] = metview_tmp
+
+            result_proc = subprocess.run(cmd_list, check=True, capture_output=True, text=True, env=env)
+            if result_proc.stdout:
+                print(result_proc.stdout)
 
             result = {
                 "success": True,
@@ -215,11 +220,19 @@ class ObservationsRetriever:
             return result
 
         except subprocess.CalledProcessError as e:
-            error_msg = f"STVL command failed with return code {e.returncode}"
-            print(f"Error retrieving {parameter}: {error_msg}")
-            raise
+            stderr_msg = e.stderr.strip() if e.stderr else "(no stderr)"
+            stdout_msg = e.stdout.strip() if e.stdout else "(no stdout)"
+            cmd_str = " ".join(cmd_list)
+            print(f"VINO command failed (exit {e.returncode}):")
+            print(f"  command: {cmd_str}")
+            print(f"  stderr:  {stderr_msg}")
+            print(f"  stdout:  {stdout_msg}")
+            raise RuntimeError(
+                f"vino_getgeo exited with code {e.returncode}. "
+                f"stderr: {stderr_msg or stdout_msg or 'no output'}"
+            ) from e
         except FileNotFoundError:
-            error_msg = f"STVL executable not found at {self.stvl_path}"
+            error_msg = f"VINO executable not found at {self.vino_path}"
             print(f"Error: {error_msg}")
             raise
         except Exception as e:

@@ -116,7 +116,12 @@ class CDFPlotting:
         if hasattr(data, "coords"):
             return data
         if hasattr(data, "to_xarray"):
-            return data.to_xarray()
+            try:
+                return data.to_xarray()
+            except NotImplementedError:
+                # earthkit >=0.17: MaskFieldList.to_xarray() is abstract.
+                from earthkit.data import FieldList as _EkFL
+                return _EkFL.from_fields(list(data)).to_xarray()
         raise ValueError(f"Cannot convert {type(data)} to xarray format")
 
     def _convert_step_to_hours(self, step_val) -> int:
@@ -300,17 +305,38 @@ class CDFPlotting:
             available_steps = xr_data.coords["step"].values
             steps_in_hours = [self._convert_step_to_hours(s) for s in available_steps]
 
-            if parameter in ["tp", "sf", "ts"]:
-                original_start, original_end = step_start, step_end
-                step_start, step_end = self._determine_accumulation_period_for_forecast(
-                    steps_in_hours, original_end - original_start
-                )
+            # For all parameter types, derive the actual step range from
+            # the data's available steps. Each CDF scenario already contains
+            # only the steps that are valid for the analysis date, so we
+            # should aggregate over the full available range rather than
+            # using a hardcoded 0-24h window (which would be wrong for D-1,
+            # D-2, … scenarios whose steps are e.g. 24-48h, 48-72h, …).
+            target_period = step_end - step_start
+            step_start, step_end = self._determine_accumulation_period_for_forecast(
+                steps_in_hours, target_period
+            )
 
-            period_steps_ns = [
-                available_steps[i]
-                for i, step_hr in enumerate(steps_in_hours)
-                if step_start <= step_hr <= step_end
-            ]
+            # Accumulation parameters (tp, sf, ts) need step_start included as
+            # the baseline for the difference calculation (end - start).
+            #
+            # All other parameters follow the Metview convention:
+            #   fcstep = [step_start+6, "to", step_end, "by", 6]
+            # i.e. step_start itself is EXCLUDED.  For 6h-since-previous-postproc
+            # variables (10fg6, mn2t6, mx2t6) the value at step_start covers the
+            # period [step_start-6 .. step_start], which is BEFORE the analysis
+            # window.  For instantaneous variables (2t) Metview also skips it.
+            if parameter in ["tp", "sf", "ts"]:
+                period_steps_ns = [
+                    available_steps[i]
+                    for i, step_hr in enumerate(steps_in_hours)
+                    if step_start <= step_hr <= step_end
+                ]
+            else:
+                period_steps_ns = [
+                    available_steps[i]
+                    for i, step_hr in enumerate(steps_in_hours)
+                    if step_hr > step_start and step_hr <= step_end
+                ]
 
             if not period_steps_ns:
                 if not steps_in_hours:
@@ -345,11 +371,11 @@ class CDFPlotting:
                 period_data = xr_data.sel(step=period_steps_ns)
                 aggregated_data = period_data.mean(dim="step")
 
-            elif parameter in ["2tmax", "10fg", "cape", "capeshear"]:
+            elif parameter in ["2tmax", "mx2t6", "10fg", "10fg6", "cape", "capeshear", "capes"]:
                 period_data = xr_data.sel(step=period_steps_ns)
                 aggregated_data = period_data.max(dim="step")
 
-            elif parameter == "2tmin":
+            elif parameter in ["2tmin", "mn2t6"]:
                 period_data = xr_data.sel(step=period_steps_ns)
                 aggregated_data = period_data.min(dim="step")
 
@@ -529,7 +555,7 @@ class CDFPlotting:
                 climate_values = self._convert_precipitation_units(
                     climate_values, from_unit=current_unit, to_unit=target_unit
                 )
-            elif parameter in ["2t", "2tmin", "2tmax"]:
+            elif parameter in ["2t", "2tmin", "2tmax", "mn2t6", "mx2t6"]:
                 if np.mean(climate_values) > 200:
                     climate_values = climate_values - 273.15
 
@@ -597,7 +623,8 @@ class CDFPlotting:
             unit = unit.lower().strip()
             if unit in ["meter", "meters"]:
                 return "m"
-            elif unit in ["millimeter", "millimeters"]:
+            elif unit in ["millimeter", "millimeters", "kg m**-2", "kg/m2", "kg m-2"]:
+                # kg m**-2 = 1 mm of water (AIFS native unit for tp)
                 return "mm"
             elif unit in ["centimeter", "centimeters"]:
                 return "cm"
@@ -654,7 +681,12 @@ class CDFPlotting:
 
         sorted_values = np.sort(clean_values)
         n = len(sorted_values)
-        percentiles = np.arange(0, n) / (n - 1) * 100
+        if n == 1:
+            # A single value has no spread to compute a 0-100 range over;
+            # represent it at the midpoint to avoid a division by zero.
+            percentiles = np.array([50.0])
+        else:
+            percentiles = np.arange(0, n) / (n - 1) * 100
 
         return sorted_values, percentiles
 
@@ -712,7 +744,7 @@ class CDFPlotting:
                 forecast_values = self._convert_precipitation_units(
                     forecast_values, from_unit=current_unit, to_unit=target_unit
                 )
-            elif parameter in ["2t", "2tmin", "2tmax"]:
+            elif parameter in ["2t", "2tmin", "2tmax", "mn2t6", "mx2t6"]:
                 if np.mean(forecast_values) > 200:
                     forecast_values = forecast_values - 273.15
 
@@ -777,7 +809,6 @@ class CDFPlotting:
 
         def sort_key(item):
             scenario_name, scenario_info = item
-            metadata = scenario_info.get("metadata", {})
 
             if scenario_name.startswith("D-"):
                 try:
@@ -787,7 +818,19 @@ class CDFPlotting:
             else:
                 day_offset = 999
 
-            forecast_time = metadata.get("forecast_time", 0)
+            # forecast_time is stored inside the "scenario_info" sub-dict added
+            # by retrieve_cdf_data, NOT in the "metadata" dict from
+            # _retrieve_forecast_data (which does not contain "forecast_time").
+            # Fall back to parsing the scenario name if the key is missing.
+            scenario_data = scenario_info.get("scenario_info", {})
+            forecast_time = scenario_data.get("forecast_time")
+            if forecast_time is None:
+                # Parse from scenario name, e.g. "D-1_12Z" → 12
+                try:
+                    forecast_time = int(scenario_name.split("_")[1].replace("Z", ""))
+                except (ValueError, IndexError):
+                    forecast_time = 0
+            # 12Z runs are fresher within the same day → sort them first
             time_priority = 0 if forecast_time == 12 else 1
 
             return (day_offset, time_priority)
@@ -803,6 +846,7 @@ class CDFPlotting:
         forecast_time: str | None = None,
         step_start: int | None = None,
         step_end: int | None = None,
+        model_name: str | None = None,
     ) -> str:
         """Generate plot title with parameter and location information.
 
@@ -848,9 +892,11 @@ class CDFPlotting:
             period_hours = step_end - step_start
             period_info = f" | {period_hours}h accumulation"
 
+        model_info = f" | Model: {model_name}" if model_name else ""
+
         title = (
             f"Cumulative Distribution Functions for {param_config['title']}\n"
-            f"Location: {lat:.2f}°, {lon:.2f}°{period_info} | Forecast: {datetime_info}"
+            f"Location: {lat:.2f}°, {lon:.2f}°{period_info}{model_info} | Forecast: {datetime_info}"
         )
 
         return title
@@ -865,6 +911,7 @@ class CDFPlotting:
         step_end: int = 24,
         target_unit: str | None = None,
         figsize: tuple[int, int] = (12, 8),
+        model_name: str | None = None,
     ) -> plt.Figure:
         """Create a CDF plot comparing forecast and climate data.
 
@@ -898,6 +945,25 @@ class CDFPlotting:
             )
 
         fig, ax = plt.subplots(figsize=figsize)
+
+        # The title should show the user's chosen Forecast Analysis Date, not
+        # the M-Climate date.  The analysis date is stored at the top-level
+        # metadata key by both the MARS retrieval and (when provided) local
+        # file loading paths.
+        top_metadata = cdf_data.get("metadata", {})
+        if model_name is None:
+            model_name = top_metadata.get("model_display_name") or top_metadata.get("model_class") or None
+        raw_analysis_date = top_metadata.get("analysis_date")  # "YYYY-MM-DD"
+        if raw_analysis_date:
+            # _generate_plot_title expects "YYYYMMDD" format
+            try:
+                from datetime import datetime as _dt
+                title_date = _dt.strptime(raw_analysis_date, "%Y-%m-%d").strftime("%Y%m%d")
+            except ValueError:
+                title_date = raw_analysis_date
+        else:
+            title_date = None
+        title_time = None  # Analysis date has no single representative time
 
         climate_date = None
 
@@ -973,7 +1039,9 @@ class CDFPlotting:
                             formatted_datetime = self._format_date_for_display(
                                 forecast_date, forecast_time_str, format_style="long"
                             )
-                            label = f"ENS {formatted_datetime}"
+                            lead_start = scenario_data.get("lead_start", step_start)
+                            lead_end = scenario_data.get("lead_end", step_end)
+                            label = f"ENS {formatted_datetime} (t+[{lead_start}-{lead_end}h])"
 
                             ax.plot(
                                 fc_x,
@@ -994,7 +1062,7 @@ class CDFPlotting:
         ax.grid(True, color="grey", linestyle="--", alpha=0.7)
 
         title = self._generate_plot_title(
-            parameter, lat, lon, climate_date, climate_time, step_start, step_end
+            parameter, lat, lon, title_date, title_time, step_start, step_end, model_name
         )
         ax.set_title(title, fontsize=14, fontweight="bold")
 
@@ -1031,10 +1099,29 @@ class CDFPlotting:
         else:
             mapped_param = parameter
 
+        # For forecast data the Python parameter key may differ from the actual
+        # GRIB shortName in the file.  E.g. "10fg6" is requested as paramId
+        # 123.128 but ECMWF may encode it with shortName "10fg" in some streams.  If the
+        # primary lookup fails, try the climate-param mapping as a fallback
+        # (it provides the correct GRIB shortName for such cases).
+        alt_param = None
+        if not is_climate:
+            climate_name = self.climate_param_map.get(parameter)
+            if climate_name and climate_name != parameter:
+                alt_param = climate_name
+
         if hasattr(data_source, "to_xarray"):
             try:
                 if hasattr(data_source, "sel"):
-                    return data_source.sel(shortName=mapped_param)
+                    try:
+                        return data_source.sel(shortName=mapped_param)
+                    except (AttributeError, KeyError):
+                        if alt_param:
+                            try:
+                                return data_source.sel(shortName=alt_param)
+                            except (AttributeError, KeyError):
+                                pass
+                        return data_source
                 return data_source
             except (AttributeError, KeyError):
                 return data_source
@@ -1045,6 +1132,11 @@ class CDFPlotting:
                 try:
                     return loaded_data.sel(shortName=mapped_param)
                 except (AttributeError, KeyError):
+                    if alt_param:
+                        try:
+                            return loaded_data.sel(shortName=alt_param)
+                        except (AttributeError, KeyError):
+                            pass
                     return loaded_data
             except Exception as e:
                 print(f"Warning: Could not load data from {data_source}: {e}")

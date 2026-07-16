@@ -18,7 +18,8 @@ class WeatherInterface:
         """Initialize the weather interface.
 
         Args:
-            config_file: Path to model configuration JSON file
+            config_file: Path to model configuration JSON file (optional,
+                defaults to "model_config.json")
 
         """
         self.ui = EnsembleUI(config_file=config_file)
@@ -40,7 +41,8 @@ def create_weather_interface(config_file="model_config.json"):
     """Create a weather interface.
 
     Args:
-        config_file: Path to model configuration JSON file
+        config_file: Path to model configuration JSON file (optional,
+            defaults to "model_config.json")
 
     Returns:
         WeatherInterface: Complete interface instance

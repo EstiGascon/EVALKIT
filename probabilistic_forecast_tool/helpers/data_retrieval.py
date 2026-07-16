@@ -1,6 +1,9 @@
 import calendar
 import datetime
 import json
+import os
+import subprocess
+import tempfile
 import traceback
 from pathlib import Path
 from typing import Any
@@ -9,6 +12,19 @@ import earthkit as ek  # type: ignore
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
 from earthkit.data import FieldList  # type: ignore
+
+# MARS uses SQLite internally.  On HPC systems $TMPDIR / $SCRATCH usually
+# point to a Lustre filesystem that does not support the POSIX file locking
+# required by SQLite, causing "unable to open database file" errors.
+# Redirect the temp directory to the local tmpfs (/tmp) early — before
+# earthkit caches it — so that every downstream MARS call uses a lockable FS.
+_MARS_TMP = f"/tmp/mars_tmp_{os.environ.get('USER', 'evalkit')}"
+os.makedirs(_MARS_TMP, exist_ok=True)
+if os.environ.get("TMPDIR", "").startswith("/ec/"):
+    os.environ["TMPDIR"] = _MARS_TMP
+    tempfile.tempdir = _MARS_TMP
+if os.environ.get("SCRATCH", "").startswith("/ec/"):
+    os.environ["SCRATCH"] = _MARS_TMP
 
 
 class BoundingBoxManager:
@@ -258,11 +274,14 @@ class EnsembleDataRetriever:
         ensemble_members: list[int] | None = None,
         calculate_windspeed: bool = True,
         calculate_6h_precipitation: bool = True,
+        custom_class: str | None = None,
+        custom_expver: str | None = None,
+        include_cf: bool = True,
     ) -> dict[str, Any]:
         """Retrieve data for stamp plots.
 
         Args:
-            model_class: 'ifs' or 'aifs'
+            model_class: 'ifs', 'aifs', or 'custom'
             forecast_date: Forecast initialization date
             forecast_time: Forecast initialization time
             selected_steps: Specific steps to retrieve
@@ -275,6 +294,10 @@ class EnsembleDataRetriever:
             ensemble_members: Specific ensemble members
             calculate_windspeed: Whether to calculate wind speed
             calculate_6h_precipitation: Whether to calculate 6-hour precipitation
+            custom_class: MARS class override when model_class is 'custom'
+            custom_expver: MARS expver override when model_class is 'custom'
+            include_cf: Whether to retrieve control forecast (CF). Set False when the
+                experiment has no control member.
 
         Returns:
             Dictionary containing HRES, control, and ensemble data
@@ -285,13 +308,31 @@ class EnsembleDataRetriever:
 
         resolved_area = self._resolve_area(area, use_bbox)
 
+        # Compute separate step lists for FC (OPER) and CF/PF (ENFO).
+        # IFS OPER supports 1-hourly steps 0-90h, but ENFO only has 3-hourly
+        # steps.  When the user selects steps, the list may contain hourly
+        # values that MARS will reject for the ENFO stream.
+        _s_start = min(selected_steps) if selected_steps else start_step
+        _s_end = max(selected_steps) if selected_steps else end_step
+
         if selected_steps is None:
-            available_steps = self.get_available_steps(
+            steps_fc = self.get_available_steps(
+                model_class, "deterministic", "fc", start_step, end_step
+            )
+            steps_enfo = self.get_available_steps(
                 model_class, "probabilistic", "pf", start_step, end_step
             )
-            steps_to_retrieve = available_steps
         else:
-            steps_to_retrieve = selected_steps
+            steps_fc = selected_steps
+            # Filter selected steps to only those valid for the ENFO stream.
+            enfo_valid = set(
+                self.get_available_steps(
+                    model_class, "probabilistic", "pf", _s_start, _s_end
+                )
+            )
+            steps_enfo = sorted(s for s in selected_steps if s in enfo_valid)
+            if not steps_enfo:
+                steps_enfo = sorted(enfo_valid)
 
         if isinstance(forecast_date, str):
             date_str = forecast_date
@@ -300,48 +341,67 @@ class EnsembleDataRetriever:
 
         results = {}
 
-        results["fc"] = self._retrieve_forecast_data(
-            model_class=model_class,
-            forecast_type="deterministic",
-            forecast_name="fc",
-            parameters=parameters,
-            date=date_str,
-            time=forecast_time,
-            steps=steps_to_retrieve,
-            area=resolved_area,
-            grid=grid,
-            calculate_windspeed=calculate_windspeed,
-            calculate_6h_precipitation=calculate_6h_precipitation,
-        )
+        try:
+            print("Retrieving deterministic forecast (FC, OPER stream)...")
+            results["fc"] = self._retrieve_forecast_data(
+                model_class=model_class,
+                forecast_type="deterministic",
+                forecast_name="fc",
+                parameters=parameters,
+                date=date_str,
+                time=forecast_time,
+                steps=steps_fc,
+                area=resolved_area,
+                grid=grid,
+                calculate_windspeed=calculate_windspeed,
+                calculate_6h_precipitation=calculate_6h_precipitation,
+                custom_class=custom_class,
+                custom_expver=custom_expver,
+            )
+        except Exception as e:
+            raise RuntimeError(f"Failed to retrieve deterministic forecast (FC): {e}") from e
 
-        results["cf"] = self._retrieve_forecast_data(
-            model_class=model_class,
-            forecast_type="probabilistic",
-            forecast_name="cf",
-            parameters=parameters,
-            date=date_str,
-            time=forecast_time,
-            steps=steps_to_retrieve,
-            area=resolved_area,
-            grid=grid,
-            calculate_windspeed=calculate_windspeed,
-            calculate_6h_precipitation=calculate_6h_precipitation,
-        )
+        if include_cf:
+            try:
+                print("Retrieving control forecast (CF, ENFO stream)...")
+                results["cf"] = self._retrieve_forecast_data(
+                    model_class=model_class,
+                    forecast_type="probabilistic",
+                    forecast_name="cf",
+                    parameters=parameters,
+                    date=date_str,
+                    time=forecast_time,
+                    steps=steps_enfo,
+                    area=resolved_area,
+                    grid=grid,
+                    calculate_windspeed=calculate_windspeed,
+                    calculate_6h_precipitation=calculate_6h_precipitation,
+                    custom_class=custom_class,
+                    custom_expver=custom_expver,
+                )
+            except Exception as e:
+                raise RuntimeError(f"Failed to retrieve control forecast (CF): {e}") from e
 
-        results["pf"] = self._retrieve_forecast_data(
-            model_class=model_class,
-            forecast_type="probabilistic",
-            forecast_name="pf",
-            parameters=parameters,
-            date=date_str,
-            time=forecast_time,
-            steps=steps_to_retrieve,
-            area=resolved_area,
-            grid=grid,
-            ensemble_members=ensemble_members,
-            calculate_windspeed=calculate_windspeed,
-            calculate_6h_precipitation=calculate_6h_precipitation,
-        )
+        try:
+            print("Retrieving perturbed forecast ensemble (PF, ENFO stream)...")
+            results["pf"] = self._retrieve_forecast_data(
+                model_class=model_class,
+                forecast_type="probabilistic",
+                forecast_name="pf",
+                parameters=parameters,
+                date=date_str,
+                time=forecast_time,
+                steps=steps_enfo,
+                area=resolved_area,
+                grid=grid,
+                ensemble_members=ensemble_members,
+                calculate_windspeed=calculate_windspeed,
+                calculate_6h_precipitation=calculate_6h_precipitation,
+                custom_class=custom_class,
+                custom_expver=custom_expver,
+            )
+        except Exception as e:
+            raise RuntimeError(f"Failed to retrieve perturbed forecast ensemble (PF): {e}") from e
 
         if use_bbox and self.bbox_manager:
             results["bbox_info"] = self.bbox_manager.get_current_bbox_params()
@@ -364,11 +424,14 @@ class EnsembleDataRetriever:
         ensemble_members: list[int] | None = None,
         calculate_windspeed: bool = True,
         calculate_6h_precipitation: bool = True,
+        custom_class: str | None = None,
+        custom_expver: str | None = None,
+        include_cf: bool = True,
     ) -> dict[str, Any]:
         """Retrieve data for plumes and meteograms.
 
         Args:
-            model_class: 'ifs' or 'aifs'
+            model_class: 'ifs', 'aifs', or 'custom'
             forecast_date: Forecast initialization date
             forecast_time: Forecast initialization time
             selected_steps: Specific steps to retrieve
@@ -382,6 +445,10 @@ class EnsembleDataRetriever:
             ensemble_members: Specific ensemble members
             calculate_windspeed: Whether to calculate wind speed
             calculate_6h_precipitation: Whether to calculate 6-hour precipitation
+            custom_class: MARS class override when model_class is 'custom'
+            custom_expver: MARS expver override when model_class is 'custom'
+            include_cf: Whether to retrieve control forecast (CF). Set False when the
+                experiment has no control member.
 
         Returns:
             Dictionary containing control, ensemble, and mean data
@@ -401,6 +468,44 @@ class EnsembleDataRetriever:
 
         levtype = "pl" if pressure_levels else "sfc"
 
+        # Deterministic-only models (no probabilistic section): retrieve just the FC stream.
+        _model_cfg = self.model_configs.get(model_class, {})
+        if "probabilistic" not in _model_cfg and "deterministic" in _model_cfg:
+            if selected_steps is None:
+                steps_to_retrieve = self.get_available_steps(
+                    model_class, "deterministic", "fc", start_step, end_step
+                )
+            else:
+                steps_to_retrieve = selected_steps
+
+            _display = _model_cfg.get("display_name", model_class.upper())
+            try:
+                print(f"Retrieving {_display} deterministic forecast (FC, OPER stream)...")
+                results["fc"] = self._retrieve_forecast_data(
+                    model_class=model_class,
+                    forecast_type="deterministic",
+                    forecast_name="fc",
+                    parameters=parameters,
+                    date=date_str,
+                    time=forecast_time,
+                    steps=steps_to_retrieve,
+                    area=resolved_area,
+                    grid=grid,
+                    levtype=levtype,
+                    pressure_levels=pressure_levels,
+                    calculate_windspeed=calculate_windspeed,
+                    calculate_6h_precipitation=calculate_6h_precipitation,
+                    custom_class=custom_class,
+                    custom_expver=custom_expver,
+                )
+            except Exception as e:
+                raise RuntimeError(f"Failed to retrieve {_display} deterministic forecast (FC): {e}") from e
+
+            if use_bbox and self.bbox_manager:
+                results["bbox_info"] = self.bbox_manager.get_current_bbox_params()
+
+            return results
+
         if selected_steps is None:
             available_steps = self.get_available_steps(
                 model_class, "probabilistic", "pf", start_step, end_step
@@ -409,38 +514,51 @@ class EnsembleDataRetriever:
         else:
             steps_to_retrieve = selected_steps
 
-        results["pf"] = self._retrieve_forecast_data(
-            model_class=model_class,
-            forecast_type="probabilistic",
-            forecast_name="pf",
-            parameters=parameters,
-            date=date_str,
-            time=forecast_time,
-            steps=steps_to_retrieve,
-            area=resolved_area,
-            grid=grid,
-            levtype=levtype,
-            pressure_levels=pressure_levels,
-            ensemble_members=ensemble_members,
-            calculate_windspeed=calculate_windspeed,
-            calculate_6h_precipitation=calculate_6h_precipitation,
-        )
+        try:
+            print("Retrieving perturbed forecast ensemble (PF, ENFO stream)...")
+            results["pf"] = self._retrieve_forecast_data(
+                model_class=model_class,
+                forecast_type="probabilistic",
+                forecast_name="pf",
+                parameters=parameters,
+                date=date_str,
+                time=forecast_time,
+                steps=steps_to_retrieve,
+                area=resolved_area,
+                grid=grid,
+                levtype=levtype,
+                pressure_levels=pressure_levels,
+                ensemble_members=ensemble_members,
+                calculate_windspeed=calculate_windspeed,
+                calculate_6h_precipitation=calculate_6h_precipitation,
+                custom_class=custom_class,
+                custom_expver=custom_expver,
+            )
+        except Exception as e:
+            raise RuntimeError(f"Failed to retrieve perturbed forecast ensemble (PF): {e}") from e
 
-        results["cf"] = self._retrieve_forecast_data(
-            model_class=model_class,
-            forecast_type="probabilistic",
-            forecast_name="cf",
-            parameters=parameters,
-            date=date_str,
-            time=forecast_time,
-            steps=steps_to_retrieve,
-            area=resolved_area,
-            grid=grid,
-            levtype=levtype,
-            pressure_levels=pressure_levels,
-            calculate_windspeed=calculate_windspeed,
-            calculate_6h_precipitation=calculate_6h_precipitation,
-        )
+        if include_cf:
+            try:
+                print("Retrieving control forecast (CF, ENFO stream)...")
+                results["cf"] = self._retrieve_forecast_data(
+                    model_class=model_class,
+                    forecast_type="probabilistic",
+                    forecast_name="cf",
+                    parameters=parameters,
+                    date=date_str,
+                    time=forecast_time,
+                    steps=steps_to_retrieve,
+                    area=resolved_area,
+                    grid=grid,
+                    levtype=levtype,
+                    pressure_levels=pressure_levels,
+                    calculate_windspeed=calculate_windspeed,
+                    calculate_6h_precipitation=calculate_6h_precipitation,
+                    custom_class=custom_class,
+                    custom_expver=custom_expver,
+                )
+            except Exception as e:
+                raise RuntimeError(f"Failed to retrieve control forecast (CF): {e}") from e
 
         if use_bbox and self.bbox_manager:
             results["bbox_info"] = self.bbox_manager.get_current_bbox_params()
@@ -458,6 +576,8 @@ class EnsembleDataRetriever:
         grid: list[float] | None = None,
         model_class: str = "ifs",
         calculate_windspeed: bool = True,
+        custom_class: str | None = None,
+        custom_expver: str | None = None,
     ) -> dict[str, Any]:
         """Retrieve data for CDF analysis following Metview logic.
 
@@ -498,6 +618,12 @@ class EnsembleDataRetriever:
 
         climate_date = self._get_climate_data_date(analysis_date_obj)
 
+        model_display_name = self.model_configs.get(model_class, {}).get(
+            "display_name", model_class.upper()
+        )
+        if model_class == "custom" and custom_expver:
+            model_display_name = f"{model_display_name} ({custom_expver})"
+
         results = {
             "cd": {},
             "forecast_data": {},
@@ -506,6 +632,8 @@ class EnsembleDataRetriever:
                 "climate_date": climate_date.strftime("%Y-%m-%d"),
                 "days_back": days_back,
                 "forecast_times": selected_forecast_times,
+                "model_class": model_class,
+                "model_display_name": model_display_name,
                 "bbox_info": self.bbox_manager.get_current_bbox_params()
                 if use_bbox and self.bbox_manager
                 else None,
@@ -513,22 +641,26 @@ class EnsembleDataRetriever:
         }
         climate_parameters = self._map_to_climate_params(parameters)
         climate_step = "24-48"
-        try:
-            results["cd"] = self._retrieve_forecast_data(
-                model_class=model_class,
-                forecast_type="probabilistic",
-                forecast_name="cd",
-                parameters=climate_parameters,
-                date=climate_date.strftime("%Y-%m-%d"),
-                time="00:00:00",
-                steps=[climate_step],
-                area=resolved_area,
-                grid=grid,
-                calculate_windspeed=False,
-                calculate_6h_precipitation=False,
-            )
-        except Exception as e:
-            print(f"Failed to retrieve climate data: {e}")
+        # M-Climate is only available for IFS. Custom experiments (class=rd) and
+        # AIFS do not have M-Climate data, so skip the retrieval entirely for them.
+        if model_class not in ("custom", "aifs"):
+            climate_model_class = "ifs"
+            try:
+                results["cd"] = self._retrieve_forecast_data(
+                    model_class=climate_model_class,
+                    forecast_type="probabilistic",
+                    forecast_name="cd",
+                    parameters=climate_parameters,
+                    date=climate_date.strftime("%Y-%m-%d"),
+                    time="00:00:00",
+                    steps=[climate_step],
+                    area=resolved_area,
+                    grid=grid,
+                    calculate_windspeed=False,
+                    calculate_6h_precipitation=False,
+                )
+            except Exception as e:
+                print(f"Failed to retrieve climate data: {e}")
 
         forecast_scenarios = []
 
@@ -581,6 +713,8 @@ class EnsembleDataRetriever:
                     grid=grid,
                     calculate_windspeed=True,
                     calculate_6h_precipitation=False,
+                    custom_class=custom_class,
+                    custom_expver=custom_expver,
                 )
 
                 forecast_data["scenario_info"] = scenario
@@ -758,11 +892,13 @@ class EnsembleDataRetriever:
         expect_any: bool = True,
         calculate_windspeed: bool = True,
         calculate_6h_precipitation: bool = True,
+        custom_class: str | None = None,
+        custom_expver: str | None = None,
     ) -> dict[str, Any]:
         """Retrive forecast data.
 
         Args:
-            model_class: 'ifs' or 'aifs'
+            model_class: 'ifs', 'aifs', or 'custom'
             forecast_type: 'deterministic' or 'probabilistic'
             forecast_name: Specific forecast configuration name
             parameters: List of parameters to retrieve
@@ -785,6 +921,24 @@ class EnsembleDataRetriever:
 
         model_config = self.model_configs[model_class]
 
+        # Override class and expver for custom RD experiments
+        if custom_class or custom_expver:
+            model_config = dict(model_config)
+            if custom_class:
+                model_config["class"] = custom_class
+            if custom_expver:
+                model_config["expver"] = custom_expver
+            # Also propagate overrides into forecast sub-configs
+            for ftype in ("deterministic", "probabilistic"):
+                if ftype in model_config:
+                    updated = {}
+                    for fname, fcfg in model_config[ftype].items():
+                        fcfg = dict(fcfg)
+                        if custom_expver:
+                            fcfg["expver"] = custom_expver
+                        updated[fname] = fcfg
+                    model_config[ftype] = updated
+
         if forecast_type not in model_config:
             raise ValueError(
                 f"Forecast type '{forecast_type}' not found for {model_class}"
@@ -795,6 +949,18 @@ class EnsembleDataRetriever:
             raise ValueError(
                 f"Forecast '{forecast_name}' not found in {model_class}/{forecast_type}"
             )
+
+        # AIFS (ML model) does not produce convective / large-scale precip
+        # separately.  Remove cp and lsp to avoid MARS returning 0 fields.
+        _aifs_unsupported = {"cp", "lsp"}
+        if model_class == "aifs" or forecast_config.get("model", "").startswith("aifs"):
+            removed = [p for p in parameters if p in _aifs_unsupported]
+            if removed:
+                parameters = [p for p in parameters if p not in _aifs_unsupported]
+                print(
+                    f"ℹ️  AIFS model: removed unsupported parameter(s) {removed}. "
+                    f"Remaining: {parameters}"
+                )
 
         surface_params = []
         pressure_params = []
@@ -808,43 +974,88 @@ class EnsembleDataRetriever:
         results = {}
 
         if surface_params:
-            surface_result = self._retrieve_single_level_data(
-                model_config,
-                forecast_config,
-                surface_params,
-                date,
-                time,
-                steps,
-                area,
-                grid,
-                "sfc",
-                None,
-                ensemble_members,
-                expect_any,
-            )
-            results.update(surface_result)
-
-        if pressure_params:
-            for param in pressure_params:
-                levels = self.pressure_level_map[param]
-                pressure_result = self._retrieve_single_level_data(
+            try:
+                surface_result = self._retrieve_single_level_data(
                     model_config,
                     forecast_config,
-                    [param],
+                    surface_params,
                     date,
                     time,
                     steps,
                     area,
                     grid,
-                    "pl",
-                    levels,
+                    "sfc",
+                    None,
                     ensemble_members,
                     expect_any,
                 )
-                if "dataset" in results:
-                    results["dataset"] = results["dataset"] + pressure_result["dataset"]
-                else:
-                    results.update(pressure_result)
+                results.update(surface_result)
+            except RuntimeError as combined_err:
+                # Combined request failed — try each parameter individually so that
+                # one unavailable parameter doesn't block all the others.
+                print(
+                    f"⚠️  Combined surface request failed ({combined_err}). "
+                    f"Retrying {len(surface_params)} parameter(s) one-by-one..."
+                )
+                successful_params = []
+                failed_params = []
+                for param in surface_params:
+                    try:
+                        single_result = self._retrieve_single_level_data(
+                            model_config,
+                            forecast_config,
+                            [param],
+                            date,
+                            time,
+                            steps,
+                            area,
+                            grid,
+                            "sfc",
+                            None,
+                            ensemble_members,
+                            expect_any,
+                        )
+                        if "dataset" in results:
+                            results["dataset"] = results["dataset"] + single_result["dataset"]
+                        else:
+                            results.update(single_result)
+                        successful_params.append(param)
+                    except RuntimeError as e:
+                        print(f"   ⚠️  Skipping '{param}': {e}")
+                        failed_params.append(param)
+                if not successful_params and failed_params:
+                    # All individual attempts failed too — re-raise original error
+                    raise RuntimeError(str(combined_err)) from combined_err
+                if failed_params:
+                    print(
+                        f"   ✅ Retrieved {len(successful_params)} parameter(s): {successful_params}. "
+                        f"Skipped: {failed_params}"
+                    )
+
+        if pressure_params:
+            for param in pressure_params:
+                levels = self.pressure_level_map[param]
+                try:
+                    pressure_result = self._retrieve_single_level_data(
+                        model_config,
+                        forecast_config,
+                        [param],
+                        date,
+                        time,
+                        steps,
+                        area,
+                        grid,
+                        "pl",
+                        levels,
+                        ensemble_members,
+                        expect_any,
+                    )
+                    if "dataset" in results:
+                        results["dataset"] = results["dataset"] + pressure_result["dataset"]
+                    else:
+                        results.update(pressure_result)
+                except RuntimeError as e:
+                    print(f"⚠️  Skipping pressure-level param '{param}' at {levels} hPa: {e}")
 
         results["metadata"] = {
             "model_class": model_class,
@@ -865,10 +1076,17 @@ class EnsembleDataRetriever:
             "ensemble_members": ensemble_members,
         }
 
+        if "dataset" not in results:
+            raise RuntimeError(
+                f"No data retrieved for {forecast_name} ({forecast_type}). "
+                f"All parameter requests returned empty. "
+                f"Requested params: {parameters}, date: {date}, time: {time}"
+            )
+
         if "dataset" in results and forecast_config["type"] != "cd":
             try:
                 dataset_type = type(results["dataset"]).__name__
-                if "Reader" in dataset_type or "Simple" in dataset_type:
+                if "Reader" in dataset_type or "Simple" in dataset_type or "Multi" in dataset_type:
                     field_list = list(results["dataset"])
                     results["dataset"] = FieldList.from_fields(field_list)
                 if calculate_windspeed:
@@ -920,6 +1138,125 @@ class EnsembleDataRetriever:
 
         return results
 
+    def _retrieve_via_pyfdb(self, request_params: dict) -> "FieldList":
+        """Fallback: retrieve data directly from FDB using pyfdb.
+
+        Used when the standard MARS client returns 0 fields for very recent
+        operational data that resides in FDB but has not yet been committed to
+        the MARS tape archive.  FDB does not run MIR interpolation, so the
+        returned GRIB data covers the native model domain (no area
+        sub-setting).  Downstream code (regridding, nearest-point extraction)
+        is responsible for any geographic filtering.
+
+        Args:
+            request_params: Original MARS request parameters dict.
+
+        Returns:
+            Earthkit FieldList (possibly empty if FDB also has no data or
+            pyfdb is not installed).
+
+        """
+        try:
+            import pyfdb  # type: ignore
+        except ImportError:
+            raise RuntimeError("[pyfdb] pyfdb not installed — FDB direct access unavailable")
+
+        # FDB does not understand MARS post-processing directives.
+        _SKIP_KEYS = {"area", "grid", "expect", "target"}
+
+        def _strip_table(p: str) -> str:
+            return str(p).split(".")[0]
+
+        fdb_request: dict = {}
+        for k, v in request_params.items():
+            if k in _SKIP_KEYS:
+                continue
+            if k == "date" and isinstance(v, str):
+                # pyfdb requires YYYYMMDD (no dashes), MARS uses YYYY-MM-DD.
+                fdb_request[k] = v.replace("-", "")
+            elif k == "param":
+                # Strip GRIB table suffix ("167.128" → "167") and pass as a
+                # Python list.  pyfdb's metkit layer accepts native Python
+                # lists; using slash-joined strings can cause pyfdb to treat
+                # the whole string as a literal match, returning 0 fields.
+                if isinstance(v, list):
+                    fdb_request[k] = [_strip_table(x) for x in v]
+                else:
+                    # Might be a single value or slash-delimited string.
+                    fdb_request[k] = [_strip_table(x) for x in str(v).split("/")]
+            elif k == "step" and isinstance(v, list):
+                # Keep steps as a Python list of integers — pyfdb natively
+                # supports this.  Slash-joined strings (e.g. "0/6/12/.../240")
+                # are a MARS text-protocol shorthand; pyfdb may only match the
+                # first value or fail to parse long lists, returning fewer
+                # steps than expected.
+                fdb_request[k] = [int(x) for x in v]
+            elif isinstance(v, list):
+                # For all other list-valued keys, pass as a Python list of
+                # strings so pyfdb treats each element as a distinct value.
+                fdb_request[k] = [str(x) for x in v]
+            elif isinstance(v, str) and "/to/" in v.lower():
+                # Expand MARS range shorthand "1/to/50" → list [1, 2, ..., 50].
+                parts = v.lower().split("/to/")
+                try:
+                    start, end = int(parts[0].strip()), int(parts[-1].strip())
+                    fdb_request[k] = list(range(start, end + 1))
+                except ValueError:
+                    fdb_request[k] = v
+            else:
+                fdb_request[k] = v
+
+        print(f"[pyfdb] FDB fallback request: {fdb_request}")
+
+        tmp_path = None
+        try:
+            fdb = pyfdb.FDB()
+            result = fdb.retrieve(fdb_request)
+
+            tmp_path = os.path.join(
+                _MARS_TMP,
+                f"pyfdb_{os.getpid()}_{abs(hash(str(sorted(fdb_request.items()))))}.grib",
+            )
+            if hasattr(result, "save"):
+                result.save(tmp_path)
+            else:
+                # Use a 4 MB buffer — individual GRIB fields from high-res
+                # models (e.g. IFS 4.4 km native grid) can easily exceed
+                # 65 KB, and an undersized buffer could truncate fields.
+                _BUF = 4 * 1024 * 1024
+                with open(tmp_path, "wb") as f:
+                    while True:
+                        chunk = result.read(_BUF)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+
+            ds = ek.data.from_source("file", tmp_path)
+            n_fdb = len(ds)
+            print(f"[pyfdb] FDB returned {n_fdb} field(s)")
+            # Warn when fewer steps came back than were requested so that any
+            # future retrieval issues are immediately visible in the log.
+            requested_steps = fdb_request.get("step")
+            if isinstance(requested_steps, list) and n_fdb > 0:
+                _n_params = len(fdb_request.get("param", [1])) if isinstance(fdb_request.get("param"), list) else 1
+                _n_params = max(_n_params, 1)
+                _expected_min = len(requested_steps)  # at least 1 field per step
+                _actual_steps = n_fdb // _n_params if _n_params else n_fdb
+                if _actual_steps < len(requested_steps):
+                    print(
+                        f"[pyfdb] ⚠️  Only {_actual_steps} of {len(requested_steps)} "
+                        f"requested steps returned — FDB may not have all steps yet."
+                    )
+            return ds
+        except Exception as e:
+            print(f"[pyfdb] FDB retrieval failed: {e}")
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+            raise RuntimeError(f"[pyfdb] FDB retrieval failed: {e}") from e
+
     def _retrieve_single_level_data(  # noqa: PLR0913
         self,
         model_config: dict,
@@ -961,6 +1298,9 @@ class EnsembleDataRetriever:
                 - 'request_params': Complete MARS request parameters used for retrieval
 
         """
+        # MARS expects time as 4-digit string e.g. "0000", not "00:00:00"
+        mars_time = time.replace(":", "")[:4] if time else time
+
         request_params = {
             "class": model_config["class"],
             "expver": forecast_config.get("expver", model_config["expver"]),
@@ -968,9 +1308,13 @@ class EnsembleDataRetriever:
             "stream": forecast_config["stream"],
             "levtype": levtype,
             "date": date,
-            "time": time,
+            "time": mars_time,
             "step": steps,
         }
+
+        # Include 'model' if specified in the forecast config (e.g. aifs-ens)
+        if "model" in forecast_config:
+            request_params["model"] = forecast_config["model"]
 
         if forecast_config["type"] == "cd":
             climate_params = self._convert_climate_params_to_ids(parameters)
@@ -1002,14 +1346,30 @@ class EnsembleDataRetriever:
             )
             request_params["quantile"] = [f"{q}:100" for q in quantiles]
         else:
-            param_ids = self._convert_params_to_ids(parameters)
-            request_params["param"] = param_ids
+            # AIFS uses GRIB table 228 for some parameters (e.g. tp is stored
+            # as 228228 instead of 228.128).  Sending table-128 numeric IDs
+            # causes MARS to return 0 fields.  Short names (e.g. "tp", "2t")
+            # are resolved correctly by MARS for every model class, so we use
+            # them directly for AIFS instead of converting to numeric IDs.
+            is_aifs = model_config.get("class") == "ai" or "model" in forecast_config
+            if is_aifs:
+                request_params["param"] = parameters
+            else:
+                param_ids = self._convert_params_to_ids(parameters)
+                request_params["param"] = param_ids
             request_params["area"] = area
 
             if pressure_levels and levtype == "pl":
                 request_params["levelist"] = pressure_levels
 
-            if grid is not None:
+            if levtype == "pl":
+                # Pressure-level fields on native reduced Gaussian grid are
+                # not directly usable for plotting.  Interpolate to a regular
+                # lat/lon grid when the user has not specified a resolution.
+                request_params["grid"] = grid if grid is not None else [0.1, 0.1]
+            elif grid is not None:
+                # Surface variables: only add grid if explicitly provided by the user.
+                # If not provided, let MARS return the native original grib.
                 request_params["grid"] = grid
 
             if forecast_config["type"] == "pf" and ensemble_members:
@@ -1020,15 +1380,103 @@ class EnsembleDataRetriever:
         if expect_any:
             request_params["expect"] = "any"
 
+        print(f"\n--- MARS Request ---\n{request_params}\n--------------------")
+
+        # Ensure temp dirs point to local tmpfs for this MARS call (SQLite
+        # needs POSIX file locking which Lustre does not support).
+        _orig_tmpdir = os.environ.get("TMPDIR")
+        _orig_scratch = os.environ.get("SCRATCH")
+        _orig_tempdir = tempfile.tempdir
+        os.makedirs(_MARS_TMP, exist_ok=True)
+        os.environ["TMPDIR"] = _MARS_TMP
+        os.environ["SCRATCH"] = _MARS_TMP
+        tempfile.tempdir = _MARS_TMP
+
         try:
             ds = ek.data.from_source("mars", **request_params)
+            n_fields = len(ds)
+            if n_fields == 0:
+                # MARS may return 0 fields for two reasons:
+                #   1. Earthkit cached an earlier 0-field response (stale cache).
+                #   2. Very recent data is still in FDB, not yet on tape archive.
+                # Strategy:
+                #   Step 1 — retry MARS with earthkit cache disabled to bypass any
+                #             stale cached empty result.
+                #   Step 2 — fall back to direct pyfdb FDB access.
+                print(
+                    "⚠️  MARS returned 0 fields — retrying without earthkit cache..."
+                )
+                ds_nocache = None
+                try:
+                    import earthkit.data as _ekd
+                    stable_path = os.path.join(
+                        _MARS_TMP,
+                        f"mars_nocache_{os.getpid()}_"
+                        f"{abs(hash(str(sorted(request_params.items()))))}.grib",
+                    )
+                    # cache-policy=off: earthkit writes to a temp dir that is
+                    # cleaned up when the context exits.  Save inside the context
+                    # while the backing file still exists.
+                    with _ekd.settings.temporary("cache-policy", "off"):
+                        ds_nocache = ek.data.from_source("mars", **request_params)
+                        if len(ds_nocache) > 0:
+                            ds_nocache.save(stable_path)
+                    if ds_nocache is not None and len(ds_nocache) > 0:
+                        ds_stable = ek.data.from_source("file", stable_path)
+                        print(
+                            f"✅ MARS (no-cache) retrieved {len(ds_stable)} field(s)"
+                        )
+                        return {"dataset": ds_stable, "request_params": request_params}
+                    print("⚠️  MARS (no-cache) also returned 0 fields — trying pyfdb FDB fallback...")
+                except Exception as nocache_e:
+                    print(f"[cache-bypass] MARS retry failed: {nocache_e} — trying pyfdb...")
 
+                try:
+                    ds_fdb = self._retrieve_via_pyfdb(request_params)
+                    if len(ds_fdb) > 0:
+                        print(
+                            f"✅ FDB fallback retrieved {len(ds_fdb)} field(s) "
+                            f"(no area filter applied — native domain returned)"
+                        )
+                        return {"dataset": ds_fdb, "request_params": request_params}
+                    print("[pyfdb] FDB also returned 0 fields")
+                except Exception as fdb_e:
+                    print(f"[pyfdb] FDB fallback unavailable: {fdb_e}")
+                raise RuntimeError(
+                    f"MARS returned 0 fields for this request. "
+                    f"This usually means the requested data does not exist "
+                    f"(wrong date, time, parameter, or area). "
+                    f"Request: {request_params}"
+                )
+            print(f"✅ Retrieved {n_fields} field(s)")
             return {"dataset": ds, "request_params": request_params}
-
+        except subprocess.CalledProcessError as e:
+            mars_output = ""
+            if e.stdout:
+                mars_output += f"\nMARS stdout:\n{e.stdout.decode(errors='replace') if isinstance(e.stdout, bytes) else e.stdout}"
+            if e.stderr:
+                mars_output += f"\nMARS stderr:\n{e.stderr.decode(errors='replace') if isinstance(e.stderr, bytes) else e.stderr}"
+            print(f"MARS returned exit code {e.returncode}{mars_output}")
+            print(f"Request parameters: {request_params}")
+            raise RuntimeError(
+                f"MARS request failed (exit code {e.returncode}). "
+                f"Check that the requested date, parameters, and area are available."
+                + (f" MARS output: {mars_output.strip()}" if mars_output.strip() else "")
+            ) from e
         except Exception as e:
             print(f"Error retrieving data: {str(e)}")
             print(f"Request parameters: {request_params}")
             raise
+        finally:
+            if _orig_tmpdir is None:
+                os.environ.pop("TMPDIR", None)
+            else:
+                os.environ["TMPDIR"] = _orig_tmpdir
+            if _orig_scratch is None:
+                os.environ.pop("SCRATCH", None)
+            else:
+                os.environ["SCRATCH"] = _orig_scratch
+            tempfile.tempdir = _orig_tempdir
 
     def read_local_grib_data(
         self,
@@ -1482,15 +1930,6 @@ class EnsembleDataRetriever:
             calculation fails.
 
         """
-        existing_params = []
-        for field in ds:
-            try:
-                param = field.metadata("shortName")
-                if param and param not in existing_params:
-                    existing_params.append(param)
-            except:  # noqa: E722
-                continue
-
         try:
             precip_params = ["tp", "lsp", "cp"]
             precip_fields = ds.sel(param=precip_params)
@@ -1637,28 +2076,9 @@ class EnsembleDataRetriever:
                             precip_6h_field = FieldList.from_array(precip_6h, md)
                             all_6h_fields.append(precip_6h_field)
                         except Exception:
-                            try:
-                                precip_6h_field = FieldList.from_array(precip_6h, md)
-                                all_6h_fields.append(precip_6h_field)
-                            except Exception:
-                                continue
+                            continue
 
                 start_hour = end_hour
-
-        if all_6h_fields:
-            try:
-                first_field = all_6h_fields[0]
-                if hasattr(first_field, "__len__") and len(first_field) > 0:
-                    (
-                        first_field[0]
-                        if hasattr(first_field, "__getitem__")
-                        else first_field
-                    )
-                else:
-                    pass
-
-            except Exception as debug_error:
-                print(f"Could not read sample metadata: {debug_error}")
 
         return all_6h_fields
 

@@ -199,12 +199,9 @@ def _extract_and_process_coordinates(
         return lats, lons
 
     except (AttributeError, ValueError) as e:
-        print(f"Grid method failed: {e}")
-
-    lats_1d = np.arange(wind_shape[0], dtype=np.float32)
-    lons_1d = np.arange(wind_shape[1], dtype=np.float32)
-    lons, lats = np.meshgrid(lons_1d, lats_1d, indexing="ij")
-    return lats, lons
+        raise ValueError(
+            f"Could not extract grid coordinates from field: {e}"
+        ) from e
 
 
 def _create_dataset(  # noqa: PLR0913

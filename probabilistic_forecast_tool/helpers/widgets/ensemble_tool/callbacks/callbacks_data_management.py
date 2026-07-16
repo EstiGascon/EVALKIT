@@ -19,6 +19,93 @@ class DataManagementCallbacks:
         """
         self.parent = parent
 
+    def _parse_steps_from_params(self, params):
+        """Parse step parameters from config into steps_to_use, start_step, end_step."""
+        selected_steps = params.get("selected_steps")
+        if selected_steps and len(selected_steps) > 0:
+            return selected_steps, min(selected_steps), max(selected_steps)
+
+        step_range = params.get("steps", "0-240")
+        if "-" in step_range:
+            start, end = map(int, step_range.split("-"))
+            return None, start, end
+        else:
+            return [int(x.strip()) for x in step_range.split(",")], 0, 240
+
+    def _resolve_steps_for_model(self, params, model_class):
+        """Resolve step list for a specific model, respecting user's max frequency.
+
+        The user-specified step frequency is treated as a MAXIMUM resolution.
+        Each model gets its own available steps filtered so that the step
+        interval is never finer than what the user requested.  If a model's
+        native resolution is coarser, the coarser interval is kept.
+        """
+        steps_to_use, start_step, end_step = self._parse_steps_from_params(params)
+
+        # Use the explicit step_frequency from the UI (always reliable)
+        max_freq = params.get("step_frequency", 1)
+
+        # Deterministic-only models have no probabilistic section in config.
+        # For those, resolve steps from the deterministic fc instead.
+        _model_cfg = self.parent.data_retriever.model_configs.get(model_class, {})
+        if "probabilistic" not in _model_cfg and "deterministic" in _model_cfg:
+            model_steps = self.parent.data_retriever.get_available_steps(
+                model_class, "deterministic", "fc", start_step, end_step
+            )
+        else:
+            model_steps = self.parent.data_retriever.get_available_steps(
+                model_class, "probabilistic", "pf", start_step, end_step
+            )
+        if not model_steps:
+            return params
+
+        if max_freq and max_freq > 1:
+            # Keep only steps that are multiples of the user's max frequency
+            model_steps = [s for s in model_steps if s % max_freq == 0]
+
+        # If user had explicit steps, intersect with model availability
+        if steps_to_use is not None:
+            user_set = set(steps_to_use)
+            model_steps = [s for s in model_steps if s in user_set]
+
+        if model_steps:
+            model_params = dict(params)
+            model_params["selected_steps"] = sorted(model_steps)
+            return model_params
+        return params
+
+    def _retrieve_single_model_meteogram_plumes(self, params, model_class, grid):
+        """Retrieve meteogram/plumes data for a single model."""
+        steps_to_use, start_step, end_step = self._parse_steps_from_params(params)
+
+        custom_class = None
+        custom_expver = None
+        include_cf = True
+        if model_class == "custom":
+            custom_class = params.get("custom_class") or None
+            custom_expver = params.get("custom_expver") or None
+            include_cf = params.get("custom_include_cf", True)
+
+        return self.parent.data_retriever.retrieve_plumes_meteograms_data(
+            model_class=model_class,
+            forecast_date=params.get("forecast_date"),
+            forecast_time=params.get("time", "00:00:00"),
+            selected_steps=steps_to_use,
+            start_step=start_step,
+            end_step=end_step,
+            parameters=params.get("parameters", ["z"]),
+            area=params.get("area"),
+            grid=grid,
+            ensemble_members=self._parse_ensemble_members(
+                params.get("ensemble_members")
+            ),
+            calculate_windspeed=True,
+            calculate_6h_precipitation=True,
+            custom_class=custom_class,
+            custom_expver=custom_expver,
+            include_cf=include_cf,
+        )
+
     def retrieve_meteogram_data(self, config):  # noqa: PLR0912
         """Retrieve meteogram data based on configuration.
 
@@ -36,43 +123,36 @@ class DataManagementCallbacks:
                 grid = None
 
             if config["data_source"] == "mars":
-                selected_steps = params.get("selected_steps")
-
-                if selected_steps and len(selected_steps) > 0:
-                    steps_to_use = selected_steps
-                else:
-                    step_range = params.get("steps", "0-240")
-                    if "-" in step_range:
-                        start, end = map(int, step_range.split("-"))
-                        steps_to_use = None
-                        start_step = start
-                        end_step = end
-                    else:
-                        steps_to_use = [int(x.strip()) for x in step_range.split(",")]
-                        start_step = 0
-                        end_step = 240
+                selected_models = params.get("selected_models", [params.get("model_class", "ifs")])
 
                 if self.parent.ui:
                     self.parent.ui.show_alert_message(
                         "Retrieving Data ...", "info", section="data", permanent=True
                     )
 
-                data = self.parent.data_retriever.retrieve_plumes_meteograms_data(
-                    model_class=params.get("model_class", "ifs"),
-                    forecast_date=params.get("forecast_date"),
-                    forecast_time=params.get("time", "00:00:00"),
-                    selected_steps=steps_to_use,
-                    start_step=start_step if "start_step" in locals() else 0,
-                    end_step=end_step if "end_step" in locals() else 240,
-                    parameters=params.get("parameters", ["z"]),
-                    area=params.get("area"),
-                    grid=grid,
-                    ensemble_members=self._parse_ensemble_members(
-                        params.get("ensemble_members")
-                    ),
-                    calculate_windspeed=True,
-                    calculate_6h_precipitation=True,
-                )
+                if len(selected_models) > 1:
+                    # Resolve steps per model: user's frequency is treated as
+                    # the maximum resolution; each model uses its own native
+                    # steps filtered to that ceiling.
+                    multi_data = {}
+                    for model in selected_models:
+                        if self.parent.ui:
+                            self.parent.ui.show_alert_message(
+                                f"Retrieving {model.upper()} data ...",
+                                "info", section="data", permanent=True,
+                            )
+                        model_params = self._resolve_steps_for_model(params, model)
+                        multi_data[model] = self._retrieve_single_model_meteogram_plumes(
+                            model_params, model, grid
+                        )
+                    data = {"_multi_model": True, "models": multi_data}
+                else:
+                    single_params = self._resolve_steps_for_model(
+                        params, selected_models[0]
+                    )
+                    data = self._retrieve_single_model_meteogram_plumes(
+                        single_params, selected_models[0], grid
+                    )
 
                 if self.parent.ui:
                     self.parent.ui.show_alert_message(
@@ -103,7 +183,13 @@ class DataManagementCallbacks:
                     )
                     self._show_data_summary_alert(data)
 
+            # Preserve previously loaded observations before overwriting
+            prev_obs = None
+            if hasattr(self.parent, "current_data") and isinstance(self.parent.current_data, dict):
+                prev_obs = self.parent.current_data.get("observations")
             self.parent.current_data = data
+            if prev_obs is not None:
+                self.parent.current_data["observations"] = prev_obs
             self.parent._on_data_retrieval_complete(config)
 
         except Exception as e:
@@ -132,21 +218,11 @@ class DataManagementCallbacks:
                 grid = None
 
             if config["data_source"] == "mars":
-                selected_steps = params.get("selected_steps")
-
-                if selected_steps and len(selected_steps) > 0:
-                    steps_to_use = selected_steps
-                else:
-                    step_range = params.get("steps", "0-240")
-                    if "-" in step_range:
-                        start, end = map(int, step_range.split("-"))
-                        steps_to_use = None
-                        start_step = start
-                        end_step = end
-                    else:
-                        steps_to_use = [int(x.strip()) for x in step_range.split(",")]
-                        start_step = 0
-                        end_step = 240
+                model_class = params.get("model_class", "ifs")
+                resolved_params = self._resolve_steps_for_model(params, model_class)
+                steps_to_use, start_step, end_step = self._parse_steps_from_params(
+                    resolved_params
+                )
 
                 if self.parent.ui:
                     self.parent.ui.show_alert_message(
@@ -157,12 +233,12 @@ class DataManagementCallbacks:
                     )
 
                 data = self.parent.data_retriever.retrieve_stamp_data(
-                    model_class=params.get("model_class", "ifs"),
+                    model_class=model_class,
                     forecast_date=params.get("forecast_date"),
                     forecast_time=params.get("time", "00:00:00"),
                     selected_steps=steps_to_use,
-                    start_step=start_step if "start_step" in locals() else 0,
-                    end_step=end_step if "end_step" in locals() else 240,
+                    start_step=start_step,
+                    end_step=end_step,
                     parameters=params.get("parameters", ["2t"]),
                     area=params.get("area"),
                     grid=grid,
@@ -170,7 +246,12 @@ class DataManagementCallbacks:
                         params.get("ensemble_members")
                     ),
                     calculate_windspeed=True,
-                    calculate_6h_precipitation=True,
+                    # Keep cumulative precipitation so stamps can compute any
+                    # accumulation period (3h, 6h, 12h, 24h...) at plot time.
+                    calculate_6h_precipitation=False,
+                    custom_class=params.get("custom_class") or None,
+                    custom_expver=params.get("custom_expver") or None,
+                    include_cf=params.get("custom_include_cf", True),
                 )
 
                 if self.parent.ui:
@@ -201,16 +282,13 @@ class DataManagementCallbacks:
                     )
                     self._show_data_summary_alert(data)
 
+            # Preserve previously loaded observations before overwriting
+            prev_obs = None
+            if hasattr(self.parent, "current_data") and isinstance(self.parent.current_data, dict):
+                prev_obs = self.parent.current_data.get("observations")
             self.parent.current_data = data
-
-            if self.parent.ui:
-                self.parent.ui.show_alert_message(
-                    "Stamps data retrieved successfully!",
-                    "success",
-                    section="data",
-                    permanent=True,
-                )
-                self._show_data_summary_alert(data)
+            if prev_obs is not None:
+                self.parent.current_data["observations"] = prev_obs
 
             self.parent._on_data_retrieval_complete(config)
 
@@ -240,21 +318,7 @@ class DataManagementCallbacks:
                 grid = None
 
             if config["data_source"] == "mars":
-                selected_steps = params.get("selected_steps")
-
-                if selected_steps and len(selected_steps) > 0:
-                    steps_to_use = selected_steps
-                else:
-                    step_range = params.get("steps", "0-240")
-                    if "-" in step_range:
-                        start, end = map(int, step_range.split("-"))
-                        steps_to_use = None
-                        start_step = start
-                        end_step = end
-                    else:
-                        steps_to_use = [int(x.strip()) for x in step_range.split(",")]
-                        start_step = 0
-                        end_step = 240
+                selected_models = params.get("selected_models", [params.get("model_class", "ifs")])
 
                 if self.parent.ui:
                     self.parent.ui.show_alert_message(
@@ -264,22 +328,26 @@ class DataManagementCallbacks:
                         permanent=True,
                     )
 
-                data = self.parent.data_retriever.retrieve_plumes_meteograms_data(
-                    model_class=params.get("model_class", "ifs"),
-                    forecast_date=params.get("forecast_date"),
-                    forecast_time=params.get("time", "00:00:00"),
-                    selected_steps=steps_to_use,
-                    start_step=start_step if "start_step" in locals() else 0,
-                    end_step=end_step if "end_step" in locals() else 240,
-                    parameters=params.get("parameters", ["z"]),
-                    area=params.get("area"),
-                    grid=grid,
-                    ensemble_members=self._parse_ensemble_members(
-                        params.get("ensemble_members")
-                    ),
-                    calculate_windspeed=True,
-                    calculate_6h_precipitation=True,
-                )
+                if len(selected_models) > 1:
+                    multi_data = {}
+                    for model in selected_models:
+                        if self.parent.ui:
+                            self.parent.ui.show_alert_message(
+                                f"Retrieving {model.upper()} plumes data ...",
+                                "info", section="data", permanent=True,
+                            )
+                        model_params = self._resolve_steps_for_model(params, model)
+                        multi_data[model] = self._retrieve_single_model_meteogram_plumes(
+                            model_params, model, grid
+                        )
+                    data = {"_multi_model": True, "models": multi_data}
+                else:
+                    single_params = self._resolve_steps_for_model(
+                        params, selected_models[0]
+                    )
+                    data = self._retrieve_single_model_meteogram_plumes(
+                        single_params, selected_models[0], grid
+                    )
 
                 if self.parent.ui:
                     self.parent.ui.show_alert_message(
@@ -310,7 +378,13 @@ class DataManagementCallbacks:
                     )
                     self._show_data_summary_alert(data)
 
+            # Preserve previously loaded observations before overwriting
+            prev_obs = None
+            if hasattr(self.parent, "current_data") and isinstance(self.parent.current_data, dict):
+                prev_obs = self.parent.current_data.get("observations")
             self.parent.current_data = data
+            if prev_obs is not None:
+                self.parent.current_data["observations"] = prev_obs
             self.parent._on_data_retrieval_complete(config)
 
         except Exception as e:
@@ -353,15 +427,21 @@ class DataManagementCallbacks:
                         permanent=True,
                     )
 
+                days_back_val = params.get("days_back")
+                if not isinstance(days_back_val, int) or days_back_val < 1:
+                    days_back_val = 3
+
                 data = self.parent.data_retriever.retrieve_cdf_data(
                     analysis_date=params.get("analysis_date"),
-                    days_back=params.get("days_back", 3),
+                    days_back=days_back_val,
                     selected_forecast_times=forecast_times,
                     parameters=params.get("parameters", ["2t"]),
                     area=params.get("area"),
                     grid=grid,
                     model_class=params.get("model_class", "ifs"),
                     calculate_windspeed=True,
+                    custom_class=params.get("custom_class") or None,
+                    custom_expver=params.get("custom_expver") or None,
                 )
 
                 if self.parent.ui:
@@ -498,12 +578,9 @@ class DataManagementCallbacks:
         """
         try:
             summary_parts = []
-            summary_parts.append(f"Data structure: {list(data.keys())}")
 
             for key, dataset_info in data.items():
-                if key == "bbox_info":
-                    continue
-                elif key == "metadata":
+                if key in ("bbox_info", "metadata"):
                     continue
                 elif isinstance(dataset_info, dict) and "dataset" in dataset_info:
                     dataset = dataset_info["dataset"]
@@ -521,9 +598,17 @@ class DataManagementCallbacks:
                                     f"  - {scenario_name}: {len(scenario_data['dataset'])} fields"
                                 )
                     else:
-                        summary_parts.append(f"{key}: {type(dataset_info)}")
+                        summary_parts.append(f"{key}: {type(dataset_info).__name__}")
                 else:
-                    summary_parts.append(f"{key}: {type(dataset_info)}")
+                    summary_parts.append(f"{key}: {type(dataset_info).__name__}")
+
+            if summary_parts and self.parent.ui:
+                self.parent.ui.show_alert_message(
+                    f"📊 {' | '.join(summary_parts)}",
+                    "info",
+                    section="data",
+                    permanent=True,
+                )
 
         except Exception as e:
             if self.parent.ui:
@@ -611,12 +696,30 @@ class DataManagementCallbacks:
 
         except Exception as e:
             if self.parent.ui:
-                self.parent.ui.show_alert_message(
-                    f"Error selecting {file_type} file: {e}",
-                    "error",
-                    section="data",
-                    permanent=True,
-                )
+                err = str(e)
+                if "DISPLAY" in err or "display" in err or "Tcl" in err:
+                    file_descriptions = {
+                        "fc": "Deterministic Forecast",
+                        "cf": "Control Forecast",
+                        "pf": "Ensemble Forecast",
+                        "cd": "Climate Data",
+                    }
+                    label = file_descriptions.get(file_type, file_type.upper())
+                    self.parent.ui.show_alert_message(
+                        f"File browser unavailable (no graphical display in this environment). "
+                        f"Please type the full path to your {label} file directly into the "
+                        f"'{label} File Path' text box above and press Enter.",
+                        "warning",
+                        section="data",
+                        permanent=True,
+                    )
+                else:
+                    self.parent.ui.show_alert_message(
+                        f"Error selecting {file_type} file: {e}",
+                        "error",
+                        section="data",
+                        permanent=True,
+                    )
 
     def validate_grib_file(self, file_path):
         """Validate that the file is a proper GRIB file.

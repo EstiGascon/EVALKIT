@@ -150,24 +150,6 @@ class DataRetrieverCallbacks:
         finally:
             self._executing["reset_map"] = False
 
-    def update_map_bounds(self):
-        """Update map view to reflect current coordinate bounds."""
-        try:
-            if self.weather_widgets.map_widget is not None:
-                north = self.weather_widgets.widgets["north"].value
-                south = self.weather_widgets.widgets["south"].value
-                west = self.weather_widgets.widgets["west"].value
-                east = self.weather_widgets.widgets["east"].value
-
-                center_lat = (north + south) / 2
-                center_lon = (west + east) / 2
-
-                if -90 <= center_lat <= 90 and -180 <= center_lon <= 180:  # noqa: PLR2004
-                    self.weather_widgets.map_widget.center = [center_lat, center_lon]
-
-        except Exception as e:
-            print(f"Error updating map bounds: {e}")
-
     def _display_message(self, message, message_type="info"):
         """Display messages in the correct info display widget based on current data source."""
         current_source = self.weather_widgets.widgets["data_source"].value

@@ -33,6 +33,7 @@ class TimeseriesCallbacks:
         self.observation_processor = None
         self.observation_stations_gdf = None
         self.observation_timeseries_df = None
+        self.observation_loaded_parameter = None
         self.observation_markers = {}
         self.original_observation_stations_gdf = None
         self.current_filtered_stations = None
@@ -58,9 +59,9 @@ class TimeseriesCallbacks:
         """Check if plotting can proceed based on parameter validation."""
         return self.validation_helper._check_validation_before_plotting()
 
-    def _add_observation_data(self, point_data, station_id):
+    def _add_observation_data(self, point_data, station_id, selected_param=None):
         """Add observation data with unit handling."""
-        return self.observation_handler._add_observation_data(point_data, station_id)
+        return self.observation_handler._add_observation_data(point_data, station_id, selected_param)
 
     def _create_unified_plot(self, parameter_name):
         """Create plot with time period mismatch detection."""
@@ -70,9 +71,13 @@ class TimeseriesCallbacks:
         """Check if any points have forecast models with no common time period."""
         return self.validation_helper._check_for_time_period_mismatches()
 
-    def setup_observation_retrieval(self, stvl_path=None):
+    def _check_for_limited_coverage(self):
+        """Return True when every model has only a single-step (zero-duration) dataset."""
+        return self.validation_helper._check_for_limited_coverage()
+
+    def setup_observation_retrieval(self, vino_path=None):
         """Initialize the observation retrieval system with configurable path."""
-        return self.observation_handler.setup_observation_retrieval(stvl_path)
+        return self.observation_handler.setup_observation_retrieval(vino_path)
 
     def _show_time_period_mismatch_error(self):
         """Show detailed error message about time period mismatch in UI."""
@@ -224,8 +229,9 @@ class TimeseriesCallbacks:
 
     def _create_unified_observation_markers(self, filtered_stations_gdf):
         """Create observation markers using unified map handler."""
+        time_index = getattr(self, "_obs_time_index", 0)
         return self.observation_handler._create_unified_observation_markers(
-            filtered_stations_gdf
+            filtered_stations_gdf, time_index=time_index
         )
 
     def _create_observation_popup_info(self, station_id, station_info):

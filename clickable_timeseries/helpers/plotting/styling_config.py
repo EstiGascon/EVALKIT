@@ -15,47 +15,54 @@ class TimeseriesStylingConfiguration:
         self._initialize_parameter_configs()
 
     def _initialize_colors(self):
-        """Initialize color palettes for different visualization contexts."""
-        # Colors that match map pins for active points
+        """Initialize color palettes for different visualization contexts.
+
+        Colors follow the Okabe-Ito palette (Wong 2011, Nature Methods),
+        which is safe for all major forms of colour blindness
+        (deuteranopia, protanopia, tritanopia).
+        """
+        # Okabe-Ito palette — excludes black (reserved for Observations)
+        # and yellow (#F0E442, too low contrast on white backgrounds).
         self.active_point_colors = [
-            "#e74c3c",  # Red
-            "#3498db",  # Blue
-            "#2ecc71",  # Green
-            "#f39c12",  # Orange
-            "#9b59b6",  # Purple
-            "#1abc9c",  # Teal
+            "#0072B2",  # Blue
+            "#D55E00",  # Vermillion
+            "#009E73",  # Bluish Green
+            "#E69F00",  # Orange
+            "#CC79A7",  # Reddish Purple
+            "#56B4E9",  # Sky Blue
         ]
 
-        # Base colors for general use
+        # Extended palette for general use — cycles through Okabe-Ito then
+        # adds perceptually distinct secondaries.
         self.base_colors = [
-            "#1f77b4",
-            "#ff7f0e",
-            "#2ca02c",
-            "#d62728",
-            "#9467bd",
-            "#8c564b",
-            "#e377c2",
-            "#7f7f7f",
-            "#bcbd22",
-            "#17becf",
-            "#ff6b6b",
-            "#4ecdc4",
-            "#45b7d1",
-            "#96ceb4",
-            "#ffeaa7",
-            "#dda0dd",
-            "#98d8c8",
-            "#f7dc6f",
-            "#bb8fce",
-            "#85c1e9",
+            "#0072B2",  # Blue
+            "#D55E00",  # Vermillion
+            "#009E73",  # Bluish Green
+            "#E69F00",  # Orange
+            "#CC79A7",  # Reddish Purple
+            "#56B4E9",  # Sky Blue
+            "#000000",  # Black
+            "#994F00",  # Brown
+            "#006CD1",  # Cobalt
+            "#22A884",  # Jade
+            "#FFC20A",  # Amber
+            "#C42503",  # Deep Red
+            "#A65628",  # Copper
+            "#4B0082",  # Indigo
+            "#1A85FF",  # Bright Blue
+            "#D41159",  # Crimson
+            "#40B0A6",  # Teal
+            "#E1BE6A",  # Warm Yellow
+            "#5D3A9B",  # Violet
+            "#1AFF1A",  # Lime
         ]
 
         # Single station colors for different data types
         self.single_station_colors = {
-            "obs": "#1f77b4",  # Blue
-            "aifs": "#d62728",  # Red
-            "ifs": "#ff7f0e",  # Orange
-            "forecast": "#2ca02c",  # Green
+            "obs":      "#000000",  # Black     (Observations — max contrast)
+            "aifs":     "#D55E00",  # Vermillion
+            "ifs":      "#0072B2",  # Blue
+            "forecast": "#009E73",  # Bluish Green
         }
 
         # Colors for different precipitation intervals
@@ -66,30 +73,52 @@ class TimeseriesStylingConfiguration:
         }
 
     def _initialize_model_styles(self):
-        """Initialize line styles and markers for different forecast models."""
-        self.model_styles = {
-            "Observations": {"dash": "dashdot", "width": 3, "symbol": "circle"},
-            "AIFS": {
-                "dash": "dash",
-                "width": 2,
-                "symbol": "diamond",
-            },
-            "IFS": {"dash": "solid", "width": 2, "symbol": "square"},
-            "aifs": {
-                "dash": "dash",
-                "width": 2,
-                "symbol": "diamond",
-            },
-            "ifs": {"dash": "solid", "width": 2, "symbol": "square"},
+        """Initialize line styles and markers for different forecast models.
+
+        Keys are the base model names (without date suffixes) as defined in
+        config.json, plus the special "Observations" key.
+        """
+        # Okabe-Ito colours assigned per model — safe for all major forms of
+        # colour blindness.  Each model also gets a unique dash pattern so
+        # series remain distinguishable even in greyscale or for users who
+        # cannot rely on colour alone.
+        self.model_colors = {
+            "ifs-single":    "#0072B2",  # Blue
+            "aifs-single":   "#D55E00",  # Vermillion
+            "ifs4km-single": "#009E73",  # Bluish Green
+            "hybrid-single": "#E69F00",  # Orange
+            "rd-experiment": "#CC79A7",  # Reddish Purple
+            "Observations":  "#000000",  # Black (always — maximum contrast)
         }
 
-        # Single point mode colors (when only one location is selected)
+        # Each model uses a distinct dash pattern in addition to colour,
+        # providing a second visual channel for accessibility.
+        self.model_styles = {
+            "ifs-single":    {"dash": "solid",       "width": 2},
+            "aifs-single":   {"dash": "dash",        "width": 2},
+            "ifs4km-single": {"dash": "dot",         "width": 2},
+            "hybrid-single": {"dash": "dashdot",     "width": 2},
+            "rd-experiment": {"dash": "longdashdot",  "width": 2},
+            "Observations":  {"dash": "solid",       "width": 3},
+            # Legacy look-up keys kept for backwards compatibility
+            "AIFS": {"dash": "dash",  "width": 2},
+            "IFS":  {"dash": "solid", "width": 2},
+        }
+
+        # Single point mode colors (one location → distinguish models by colour)
         self.single_point_colors = {
-            "AIFS": "red",
-            "IFS": "green",
-            "aifs": "red",
-            "ifs": "green",
-            "Observations": "blue",
+            "ifs-single":    self.model_colors["ifs-single"],
+            "aifs-single":   self.model_colors["aifs-single"],
+            "ifs4km-single": self.model_colors["ifs4km-single"],
+            "hybrid-single": self.model_colors["hybrid-single"],
+            "rd-experiment": self.model_colors["rd-experiment"],
+            "Observations":  self.model_colors["Observations"],
+            # Legacy keys
+            "AIFS": self.model_colors["aifs-single"],
+            "IFS":  self.model_colors["ifs-single"],
+            "aifs": self.model_colors["aifs-single"],
+            "ifs":  self.model_colors["ifs-single"],
+            "Observations_legacy": "blue",
         }
 
     def _initialize_parameter_configs(self):
@@ -323,41 +352,71 @@ class TimeseriesStylingConfiguration:
         else:
             return active_stations.get(station_id, self.base_colors[0])
 
+    def _get_model_base_name(self, model_name: str) -> str:
+        """Extract the canonical model base name from a possibly date-suffixed key.
+
+        Examples
+        --------
+        "aifs-single_20240101" -> "aifs-single"
+        "rd-experiment_20240101" -> "rd-experiment"
+        "Observations" -> "Observations"
+
+        """
+        if model_name == "Observations":
+            return "Observations"
+        # Strip trailing _YYYYMMDD date suffix produced by data_acquisition.py
+        parts = model_name.rsplit("_", 1)
+        if len(parts) == 2 and parts[1].isdigit():
+            return parts[0]
+        return model_name
+
+    def get_model_color(self, model_name: str) -> str:
+        """Return the fixed display colour assigned to a model type.
+
+        Observations are always black.  Unknown models fall back to the first
+        base colour.
+
+        Args:
+            model_name: Full dataset key or base model name.
+
+        Returns:
+            Hex colour string.
+
+        """
+        base = self._get_model_base_name(model_name)
+        return self.model_colors.get(base, self.base_colors[0])
+
     def get_model_style(self, model_name):
         """Get line style configuration for a model.
 
         Args:
-            model_name (str): Name of the model
+            model_name (str): Name of the model (full dataset key or base name)
 
         Returns:
             dict: Style configuration with dash, width, symbol
 
         """
-        if model_name == "Observations":
-            style_key = "Observations"
-        elif "aifs" in model_name.lower():
-            style_key = "AIFS"
-        elif "ifs" in model_name.lower() and "aifs" not in model_name.lower():
-            style_key = "IFS"
-        else:
-            style_key = model_name
-
+        base = self._get_model_base_name(model_name)
         return self.model_styles.get(
-            style_key, {"dash": "solid", "width": 2, "symbol": "circle"}
+            base, {"dash": "solid", "width": 2}
         )
 
     def get_single_point_color(self, model_name, point_color):
         """Get color for single point mode visualization.
 
+        In single-point mode every model gets its own fixed colour so the lines
+        are easy to tell apart even without consulting the legend.
+
         Args:
             model_name (str): Name of the model
-            point_color (str): Default point color
+            point_color (str): Default point color (used only as ultimate fallback)
 
         Returns:
             str: Color to use for the line
 
         """
-        return self.single_point_colors.get(model_name, point_color)
+        base = self._get_model_base_name(model_name)
+        return self.single_point_colors.get(base, point_color)
 
     def generate_random_color(self):
         """Generate a random color in hex format.
@@ -465,18 +524,18 @@ class TimeseriesStylingConfiguration:
             "height": 680 if single_station_mode else 500,
             "hovermode": "closest",
             "legend": {
-                "orientation": "v",
+                "orientation": "h",
                 "yanchor": "top",
-                "y": 1,
-                "xanchor": "left",
-                "x": 1.02,
+                "y": -0.35,
+                "xanchor": "center",
+                "x": 0.5,
                 "font": {"size": 10 if single_station_mode else 9, "color": "black"},
             },
             "showlegend": True,
             "margin": {
-                "r": 150 if single_station_mode else 200,
+                "r": 20,
                 "t": 50 if single_station_mode else 60,
-                "b": 50,
+                "b": 120,
                 "l": 50,
             },
             "paper_bgcolor": "white",

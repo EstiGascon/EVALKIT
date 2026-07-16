@@ -1,4 +1,5 @@
 import datetime
+import subprocess
 from typing import Any
 
 import earthkit.data as ekd
@@ -107,6 +108,8 @@ class ForecastDataLoader:
         use_bbox: bool = True,
         custom_area: list[float] | None = None,
         custom_steps: list[int] | None = None,
+        expver: str | None = None,
+        custom_class: str | None = None,
     ) -> dict[str, Any] | None:
         """Retrieve meteorological data from Mars Archive based on date range.
 
@@ -171,6 +174,8 @@ class ForecastDataLoader:
             grid,
             start_date.strftime("%Y-%m-%d"),
             custom_steps,
+            expver=expver,
+            custom_class=custom_class,
         )
 
     def _filter_params_for_model(self, param: list[str], model: str) -> list[str]:
@@ -219,6 +224,8 @@ class ForecastDataLoader:
         grid: list[float] | None,
         date_str: str,
         custom_steps: list[int] | None = None,
+        expver: str | None = None,
+        custom_class: str | None = None,
     ) -> dict[str, Any] | None:
         """Handle single request to Mars Archive.
 
@@ -241,7 +248,9 @@ class ForecastDataLoader:
 
         """
         param_ids = self.config_manager.get_param_ids(param)
-        class_model = self.config_manager.get_model_class(model)
+        class_model = custom_class or self.config_manager.get_model_class(model)
+        # expver: use caller-supplied value first, then fall back to config
+        expver = expver or (self.config_manager.get_model_info(model) or {}).get("expver")
 
         if custom_steps:
             if self.config_manager.supports_custom_step_expansion(model):
@@ -249,7 +258,46 @@ class ForecastDataLoader:
                     custom_steps, model, start_date
                 )
             else:
-                steps_to_download = custom_steps.copy()
+                # For non-expandable models (fixed interval, e.g. ifs4km-single hourly,
+                # hybrid-single 3-hourly) the multi-model step selector may show coarser
+                # 6-hourly options.  Interpret the user's selection as a *range* and
+                # regenerate native steps via generate_steps so that we always request
+                # the model's own interval (1 h for ifs4km-single, 3 h for hybrid-single).
+                # generate_steps respects max_step internally, so no manual clip is needed.
+                user_min = min(custom_steps)
+                user_max = max(custom_steps)
+                model_max_step = self.config_manager.get_model_max_step(model)
+                effective_max = (
+                    min(user_max, model_max_step)
+                    if model_max_step is not None
+                    else user_max
+                )
+                if effective_max < user_min:
+                    print(
+                        f"⚠️  All selected steps exceed max_step={model_max_step} h "
+                        f"for {model}. Skipping retrieval."
+                    )
+                    return {
+                        "error": (
+                            f"All selected steps exceed the maximum ({model_max_step} h) "
+                            f"available for {model}. No data retrieved."
+                        ),
+                        "model": model,
+                        "request_params": {},
+                    }
+                steps_to_download = self.config_manager.generate_steps(
+                    user_min, effective_max, model, start_date
+                )
+                if not steps_to_download:
+                    print(f"⚠️  No steps generated for {model} in range [{user_min}, {effective_max}].")
+                    return {
+                        "error": (
+                            f"No steps could be generated for {model} "
+                            f"in range [{user_min}h, {effective_max}h]."
+                        ),
+                        "model": model,
+                        "request_params": {},
+                    }
         else:
             steps_to_download = self._calculate_steps_from_date_range(
                 start_date, end_date, time, model
@@ -265,12 +313,41 @@ class ForecastDataLoader:
             "type": type,
             "levtype": levtype,
             "area": area,
+            "expect": "any",
         }
         if grid:
             request_params["grid"] = grid
+        if expver:
+            request_params["expver"] = expver
 
         try:
-            ds = ekd.from_source("mars", **request_params)
+            # MARS uses SQLite internally. Both $TMPDIR and $SCRATCH are on
+            # Lustre, which does not support SQLite POSIX file locking and
+            # causes "unable to open database file" errors. Use /tmp (local
+            # tmpfs) unconditionally so SQLite always has a working filesystem.
+            import os
+            _orig_tmpdir = os.environ.get("TMPDIR")
+            _mars_tmp = f"/tmp/mars_tmp_{os.environ.get('USER', 'evalkit')}"
+            os.makedirs(_mars_tmp, exist_ok=True)
+            os.environ["TMPDIR"] = _mars_tmp
+
+            try:
+                ds = ekd.from_source("mars", **request_params)
+            finally:
+                if _orig_tmpdir is None:
+                    os.environ.pop("TMPDIR", None)
+                else:
+                    os.environ["TMPDIR"] = _orig_tmpdir
+
+            # ── 0-fields guard ────────────────────────────────────────────
+            # Recent operational data (class=od) can be in FDB but not yet
+            # committed to MARS tape.  earthkit caches the empty response;
+            # subsequent calls return the stale 0-field result.  Try three
+            # escalating fallbacks before giving up.
+            if len(ds) == 0:
+                print(f"⚠️  MARS returned 0 fields for {model} — retrying without earthkit cache...")
+                ds = self._retry_no_cache(request_params, model)
+
             model_key = f"{model}_{start_date.strftime('%Y%m%d')}"
             metadata = {
                 "param": param,
@@ -303,8 +380,151 @@ class ForecastDataLoader:
 
             return {"dataset": ds, "metadata": metadata, "model_key": model_key}
         except Exception as e:
-            print(f"❌ MARS request failed: {e}")
-            return None
+            # Walk the exception chain to find a CalledProcessError with stderr
+            error_detail = str(e)
+            cause = e
+            while cause is not None:
+                if isinstance(cause, subprocess.CalledProcessError):
+                    parts = []
+                    if cause.stderr:
+                        s = cause.stderr if isinstance(cause.stderr, str) else cause.stderr.decode("utf-8", errors="replace")
+                        parts.append(s.strip())
+                    if cause.stdout:
+                        s = cause.stdout if isinstance(cause.stdout, str) else cause.stdout.decode("utf-8", errors="replace")
+                        parts.append(s.strip())
+                    if parts:
+                        error_detail = "\n".join(parts)
+                    break
+                cause = getattr(cause, "__cause__", None) or getattr(cause, "__context__", None)
+            print(f"❌ MARS request failed for {model}: {error_detail}")
+            steps = request_params.get("step", [])
+            step_summary = f"{steps[0]}/.../{steps[-1]} ({len(steps)} steps)" if len(steps) > 3 else str(steps)
+            error_req = {k: v for k, v in request_params.items() if k != "step"}
+            error_req["step"] = step_summary
+            return {"error": error_detail, "model": model, "request_params": error_req}
+
+    def _retry_no_cache(self, request_params: dict, model: str):
+        """Bypass earthkit cache and retry MARS, then fall back to pyfdb.
+
+        When MARS returns 0 fields the earthkit user cache stores that empty
+        response.  Subsequent calls within the same session return the stale
+        cached result.  This method first retries with the cache disabled; if
+        that also returns 0 fields it falls back to a direct pyfdb FDB read
+        (useful when data is in FDB but not yet on MARS tape).
+
+        Returns the best non-empty FieldList found, or an empty FieldList when
+        all attempts fail (the caller decides how to handle it).
+        """
+        import os
+        import earthkit.data as _ekd
+
+        _MARS_TMP = f"/tmp/mars_tmp_{os.environ.get('USER', 'evalkit')}"
+        os.makedirs(_MARS_TMP, exist_ok=True)
+
+        # Stage 1 — MARS without earthkit cache ──────────────────────────
+        try:
+            stable_path = os.path.join(
+                _MARS_TMP,
+                f"ts_nocache_{os.getpid()}_{abs(hash(str(sorted(request_params.items()))))}.grib",
+            )
+            ds_nocache = None
+            with _ekd.settings.temporary("cache-policy", "off"):
+                ds_nocache = _ekd.from_source("mars", **request_params)
+                if len(ds_nocache) > 0:
+                    ds_nocache.save(stable_path)
+            if ds_nocache is not None and len(ds_nocache) > 0:
+                ds_stable = _ekd.from_source("file", stable_path)
+                print(f"✅ MARS (no-cache) retrieved {len(ds_stable)} field(s) for {model}")
+                return ds_stable
+            print(f"⚠️  MARS (no-cache) also returned 0 fields for {model} — trying pyfdb...")
+        except Exception as e:
+            print(f"[cache-bypass] MARS retry failed for {model}: {e} — trying pyfdb...")
+
+        # Stage 2 — direct pyfdb FDB read ────────────────────────────────
+        try:
+            ds_fdb = self._retrieve_via_pyfdb(request_params)
+            if len(ds_fdb) > 0:
+                print(f"✅ FDB fallback retrieved {len(ds_fdb)} field(s) for {model} (native domain — no area filter)")
+                return ds_fdb
+            print(f"[pyfdb] FDB also returned 0 fields for {model}")
+        except Exception as e:
+            print(f"[pyfdb] FDB fallback unavailable for {model}: {e}")
+
+        # All fallbacks exhausted — return empty dataset so caller can report
+        return ekd.from_source("file", [])
+
+    def _retrieve_via_pyfdb(self, request_params: dict):
+        """Retrieve data directly from FDB using pyfdb, bypassing MARS.
+
+        Translates the MARS-style request_params into the format pyfdb expects:
+        - date: YYYYMMDD (no dashes)
+        - param: plain numeric IDs without '.128' table suffix
+        - no area/grid/expect/target keys (FDB post-processing not supported)
+        - lists → slash-separated strings
+
+        Returns an earthkit FieldList loaded from the written GRIB file.
+        """
+        import os
+        try:
+            import pyfdb
+        except ImportError:
+            raise RuntimeError("pyfdb is not installed — cannot use FDB fallback")
+
+        _SKIP_KEYS = {"area", "grid", "expect", "target"}
+        _MARS_TMP = f"/tmp/mars_tmp_{os.environ.get('USER', 'evalkit')}"
+        os.makedirs(_MARS_TMP, exist_ok=True)
+
+        fdb_request = {}
+        for k, v in request_params.items():
+            if k in _SKIP_KEYS:
+                continue
+            if k == "date":
+                v = str(v).replace("-", "")
+            if k == "param":
+                if isinstance(v, list):
+                    cleaned = [str(p).split(".")[0] for p in v]
+                    v = "/".join(cleaned)
+                else:
+                    v = str(v).split(".")[0]
+            elif k == "time":
+                # FDB expects HHMM not HH:MM:SS
+                v = str(v).replace(":", "")[:4]
+            elif isinstance(v, list):
+                # Expand MARS range shorthands like "1/to/50" to "1/2/.../50"
+                def _expand(item):
+                    parts = str(item).split("/")
+                    if len(parts) == 3 and parts[1].lower() == "to":
+                        try:
+                            return list(range(int(parts[0]), int(parts[2]) + 1))
+                        except ValueError:
+                            pass
+                    return [item]
+                flat = []
+                for item in v:
+                    flat.extend(_expand(item))
+                v = "/".join(str(x) for x in flat)
+            else:
+                v = str(v)
+            fdb_request[k] = v
+
+        tmp_path = os.path.join(
+            _MARS_TMP,
+            f"ts_pyfdb_{os.getpid()}_{abs(hash(str(sorted(fdb_request.items()))))}.grib",
+        )
+        try:
+            fdb = pyfdb.FDB()
+            result = fdb.retrieve(fdb_request)
+            with open(tmp_path, "wb") as f:
+                while True:
+                    chunk = result.read(65536)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+            return ekd.from_source("file", tmp_path)
+        except Exception as e:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            raise RuntimeError(f"pyfdb retrieval failed: {e}") from e
 
     def _calculate_steps_from_date_range(
         self,

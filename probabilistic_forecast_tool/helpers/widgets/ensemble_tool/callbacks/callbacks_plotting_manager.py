@@ -24,8 +24,6 @@ class PlottingManagerCallbacks:
         """Cache parameter lists from config for efficient access."""
         self.calculated_params = self._get_calculated_parameters()
 
-        self.special_display_params = self._get_special_display_parameters()
-
     def _get_calculated_parameters(self):
         """Get list of calculated parameters from config.
 
@@ -39,23 +37,7 @@ class PlottingManagerCallbacks:
                 calculated.append(param)
         return calculated
 
-    def _get_special_display_parameters(self):
-        """Get special display text for calculated parameters.
-
-        Returns:
-            dict: Mapping of param to display text
-
-        """
-        special = {}
-        for param, info in self.config_manager.surface_variables.items():
-            if info.get("type") == "calculated":
-                name = info.get("name", param.upper())
-                units = info.get("units", "")
-                display = f"{name} ({units})" if units else name
-                special[param] = display
-        return special
-
-    def create_stamps_plot(self, parameter, step, unit_value, palette_value):
+    def create_stamps_plot(self, parameter, step, unit_value, palette_value, precip_accumulation=None):
         """Create stamps plot using plotting manager.
 
         Args:
@@ -63,6 +45,9 @@ class PlottingManagerCallbacks:
             step: Forecast step
             unit_value: Unit for display
             palette_value: Palette selection
+            precip_accumulation: Optional accumulation window in hours for
+                precipitation parameters (tp/lsp/cp). If None, raw field
+                values are plotted.
 
         Returns:
             bool: True if successful
@@ -108,6 +93,7 @@ class PlottingManagerCallbacks:
                 step=step,
                 unit_value=unit_value,
                 palette_value=palette_value,
+                precip_accumulation=precip_accumulation,
             )
 
             if success:
@@ -118,6 +104,22 @@ class PlottingManagerCallbacks:
                         f"Stamps plot created! Parameter: {parameter.upper()}, Step: T+{step}h",
                         "success",
                         section="plotting",
+                    )
+            else:
+                if self.parent.ui:
+                    last_err = getattr(self.parent.plotting_manager, "_last_stamps_error", "")
+                    msg = (
+                        f"Could not create stamps plot for {parameter.upper()} at T+{step}h. "
+                    )
+                    if last_err:
+                        msg += str(last_err)
+                    else:
+                        msg += "Check that this parameter and step exist in the retrieved data."
+                    self.parent.ui.show_alert_message(
+                        msg,
+                        "error",
+                        section="plotting",
+                        permanent=True,
                     )
 
             return success
@@ -231,6 +233,9 @@ class PlottingManagerCallbacks:
                 )[0]
                 lat, lon = point_coords
 
+                if not self.parent.map_handler.validate_point_in_current_bbox(lat, lon):
+                    return False
+
             success = self.parent.plotting_manager.create_meteogram_plot(
                 parameter=parameter, unit_value=unit_value
             )
@@ -251,13 +256,29 @@ class PlottingManagerCallbacks:
                         section="plotting",
                         permanent=True,
                     )
+            else:
+                if self.parent.ui:
+                    pm = self.parent.plotting_manager
+                    if not pm.current_data:
+                        msg = "No data loaded. Please retrieve or load data first."
+                    elif not pm.selected_points:
+                        msg = "No point selected. Please click the map or use '+ Add Point'."
+                    else:
+                        msg = f"Parameter '{parameter}' could not be plotted. It may not be present in the loaded data."
+                    self.parent.ui.show_alert_message(
+                        msg, "error", section="plotting", permanent=True
+                    )
 
             return success
 
         except Exception as e:
+            traceback.print_exc()
             if self.parent.ui:
                 self.parent.ui.show_alert_message(
-                    f"Error creating meteogram: {e}", "error"
+                    f"Error creating meteogram: {e}",
+                    "error",
+                    section="plotting",
+                    permanent=True,
                 )
             return False
 
@@ -297,6 +318,9 @@ class PlottingManagerCallbacks:
                 )[0]
                 lat, lon = point_coords
 
+                if not self.parent.map_handler.validate_point_in_current_bbox(lat, lon):
+                    return False
+
             success = self.parent.plotting_manager.create_plumes_plot(
                 parameter=parameter, unit_value=unit_value
             )
@@ -311,10 +335,23 @@ class PlottingManagerCallbacks:
                         section="plotting",
                         permanent=True,
                     )
+            else:
+                if self.parent.ui:
+                    pm = self.parent.plotting_manager
+                    if not pm.current_data:
+                        msg = "No data loaded. Please retrieve or load data first."
+                    elif not pm.selected_points:
+                        msg = "No point selected. Please click the map or use '+ Add Point'."
+                    else:
+                        msg = f"Parameter '{parameter}' could not be plotted. It may not be present in the loaded data."
+                    self.parent.ui.show_alert_message(
+                        msg, "error", section="plotting", permanent=True
+                    )
 
             return success
 
         except Exception as e:
+            traceback.print_exc()
             if self.parent.ui:
                 self.parent.ui.show_alert_message(
                     f"Error creating plumes plot: {e}",
@@ -502,6 +539,10 @@ class PlottingManagerCallbacks:
 
         detected_params.update(self._add_calculated_parameters(detected_params))
 
+        # Remove 10si (scalar wind speed from GRIB) in favour of the
+        # calculated ws derived from 10u and 10v components.
+        detected_params.discard("10si")
+
         return sorted(detected_params)
 
     def _detect_from_standard_data(self):
@@ -575,6 +616,15 @@ class PlottingManagerCallbacks:
                     params.add(param)
         except Exception:
             pass
+
+        # Fallback: read from stored metadata in case synthetic calculated fields
+        # (e.g. 6-hour precipitation created by FieldList.from_array) do not
+        # expose their shortName through the field API.
+        metadata = data_info.get("metadata", {})
+        for meta_key in ("parameters", "calculated_parameters"):
+            for param in metadata.get(meta_key, []):
+                if param:
+                    params.add(param)
 
         return params
 

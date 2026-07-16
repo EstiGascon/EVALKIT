@@ -166,7 +166,7 @@ class SurfaceVariablesMapsRender:
 
         return result
 
-    def plot_dynamic_maps(  # noqa: D102, PLR0912, PLR0913, PLR0915
+    def plot_dynamic_maps(  # noqa: PLR0912, PLR0913, PLR0915
         self,
         data,
         parameter_name,
@@ -181,6 +181,28 @@ class SurfaceVariablesMapsRender:
         regrid=True,
         target_resolution=0.25,
     ):
+        """Create an interactive dynamic map plot for a single forecast step.
+
+        Args:
+            data: earthkit/xarray dataset or DataArray for the parameter.
+            parameter_name: Short name of the parameter to plot (e.g. "2t", "tp").
+            unit: Optional display unit; defaults to the parameter's native unit.
+            palette_color: Optional colorscale palette option (1, 2, or 3).
+            step: Optional forecast step to select if the data has a step dimension.
+            opacity: Layer opacity (0-1).
+            zoom_level: Initial map zoom level.
+            height: Plot height in pixels.
+            width: Optional plot width in pixels (auto if None).
+            calculated_data: Optional dict of calculated variables (e.g. wind
+                speed, accumulated precipitation) keyed by parameter name,
+                used instead of `data` when `parameter_name` is present in it.
+            regrid: Whether to regrid reduced Gaussian grids to a regular grid.
+            target_resolution: Target resolution in degrees when regridding.
+
+        Returns:
+            hvplot/holoviews dynamic map object.
+
+        """
         date = None
         time = None
 
@@ -415,7 +437,7 @@ class SurfaceVariablesMapsRender:
         }
 
         plot = grid_xr.hvplot.quadmesh(**geo_quadmesh_options)
-        borders = gf.borders.opts(line_color="black", line_width=0)
+        borders = gf.borders.opts(line_color="black", line_width=1)
         plot.opts(active_tools=["wheel_zoom"])
         final_plot = plot * borders
 
@@ -550,7 +572,7 @@ class SurfaceVariablesMapsRender:
                 df_plot = transformed_data.to_dataframe().reset_index().dropna()
                 value_col = parameter_name
 
-            if parameter_name in ["tp", "lsp", "acc_tp", "cp"]:
+            if parameter_name in ["tp", "lsp", "acc_tp", "cp", "acc_cp", "acc_lsp"]:
                 df_plot = df_plot[df_plot[value_col] > 0]
 
             if not df_plot.empty:

@@ -1,9 +1,10 @@
 {
-  "stvl_path":"/home/moz/bin/stvl_getgeo",
+  "vino_path":"/home/moz/bin/vino_getgeo",
   "model_configs": {
     "ifs": {
       "class": "od",
       "expver": "1",
+      "display_name": "IFS-ENS",
       "step_config": {
         "type": "intervals",
         "intervals": [[0, 90, 1], [90, 144, 3], [144, 360, 6]]
@@ -19,12 +20,13 @@
       },
       "probabilistic": {
         "cf": {
-          "type": "cf",
+          "type": "fc",
           "expver": "1",
-          "stream": "enfo",
+          "stream": "oper",
           "levtype": "sfc",
-          "description": "Control Forecast",
-          "members": 1
+          "description": "ENS Control Forecast (IFS Cycle 50r1+: formerly HRES, now stream=oper, type=fc)",
+          "members": 1,
+          "step_config": {"type": "intervals", "intervals": [[0, 90, 1], [90, 144, 3], [144, 360, 6]]}
         },
         "pf": {
           "type": "pf", 
@@ -33,8 +35,8 @@
           "levtype": "sfc",
           "description": "Perturbed Forecast (Ensemble Members)",
           "members": 50,
-          "number_range": "1/to/50"
-
+          "number_range": "1/to/50",
+          "step_config": {"type": "intervals", "intervals": [[0, 360, 3]]}
         },
         "cd": {
           "type": "cd",
@@ -49,7 +51,8 @@
     },
     "aifs": {
       "class": "ai",
-      "expver": "0001", 
+      "expver": "0001",
+      "display_name": "AIFS-ENS", 
       "step_config": {
         "type": "range",
         "start": 0,
@@ -61,6 +64,7 @@
           "type": "fc",
           "expver": "0001", 
           "stream": "oper",
+          "model": "aifs-single",
           "levtype": "sfc",
           "description": "AIFS Single Deterministic Forecast"
         }
@@ -70,6 +74,7 @@
           "type": "cf",
           "stream": "enfo",
           "expver": "0001", 
+          "model": "aifs-ens",
           "levtype": "sfc",
           "description": "AIFS Control Forecast", 
           "members": 1
@@ -78,8 +83,86 @@
           "type": "pf",
           "stream": "enfo", 
           "expver": "0001", 
+          "model": "aifs-ens",
           "levtype": "sfc",
           "description": "AIFS Perturbed Forecast (Ensemble Members)",
+          "members": 50,
+          "number_range": "1/to/50"
+        }
+      }
+    },
+    "aifs-single": {
+      "class": "ai",
+      "expver": "0001",
+      "display_name": "AIFS-Single",
+      "step_config": {
+        "type": "range",
+        "start": 0,
+        "end": 360,
+        "step": 6
+      },
+      "deterministic": {
+        "fc": {
+          "type": "fc",
+          "expver": "0001",
+          "stream": "oper",
+          "model": "aifs-single",
+          "levtype": "sfc",
+          "description": "AIFS Single Deterministic Forecast"
+        }
+      }
+    },
+    "ifs-4km": {
+      "class": "rd",
+      "expver": "iekm",
+      "display_name": "IFS 4.4km",
+      "step_config": {
+        "type": "intervals",
+        "intervals": [[0, 90, 1], [90, 144, 3], [144, 360, 6]]
+      },
+      "deterministic": {
+        "fc": {
+          "type": "fc",
+          "expver": "iekm",
+          "stream": "oper",
+          "levtype": "sfc",
+          "description": "IFS 4.4 km Deterministic Forecast"
+        }
+      }
+    },
+    "custom": {
+      "class": "rd",
+      "expver": "xxxx",
+      "display_name": "Custom Experiment",
+      "description": "RD Experiment",
+      "step_config": {
+        "type": "intervals",
+        "intervals": [[0, 90, 1], [90, 144, 3], [144, 360, 6]]
+      },
+      "deterministic": {
+        "fc": {
+          "type": "fc",
+          "expver": "xxxx",
+          "stream": "oper",
+          "levtype": "sfc",
+          "description": "High Resolution Deterministic Forecast"
+        }
+      },
+      "probabilistic": {
+        "cf": {
+          "type": "fc",
+          "expver": "xxxx",
+          "stream": "oper",
+          "levtype": "sfc",
+          "description": "ENS Control Forecast (IFS Cycle 50r1+: formerly HRES, now stream=oper, type=fc)",
+          "members": 1
+        },
+        "pf": {
+          "type": "pf",
+          "expver": "xxxx",
+          "stream": "enfo",
+          "levtype": "sfc",
+          "description": "Perturbed Forecast (Ensemble Members)",
           "members": 50,
           "number_range": "1/to/50"
         }
@@ -116,6 +199,7 @@
       "mn2t6": "122.128",
       "mx2t6": "121.128",
       "i10fg": "29.228",
+      "10fg6": "123.128",
       "sf": "144.128",
       "capes": "44.228",
       "t": "130.128",
@@ -143,7 +227,7 @@
     "cdf": {
       "description": "Cumulative Distribution Functions from climate data",
       "required_data": ["cd", "pf"],
-      "typical_params": ["2t", "tp", "i10fg", "mn2t6", "mx2t6", "sf", "capes"]
+      "typical_params": ["2t", "tp", "10fg6", "mn2t6", "mx2t6", "sf", "capes"]
     }
   },
   "surface_variables": {
@@ -155,14 +239,14 @@
       "climate_param": "avg_2t"
     },
     "mn2t6": {
-      "name": "2 metre minimum temperature (last 6h)", 
+      "name": "2 metre minimum temperature (24h min)", 
       "units": "K", 
       "type": "min",
       "param_id": "122.128",
       "climate_param": "mn2t"
     },
     "mx2t6": {
-      "name": "2 metre maximum temperature (last 6h)", 
+      "name": "2 metre maximum temperature (24h max)", 
       "units": "K", 
       "type": "max",
       "param_id": "121.128",
@@ -184,7 +268,13 @@
       "name": "10 metre wind gust", 
       "units": "m/s", 
       "type": "instantaneous",
-      "param_id": "29.228",
+      "param_id": "29.228"
+    },
+    "10fg6": {
+      "name": "10 metre wind gust (24h max)", 
+      "units": "m/s", 
+      "type": "max",
+      "param_id": "123.128",
       "climate_param": "10fg"
     },
     "msl": {
@@ -237,25 +327,25 @@
       "description": "Calculated from 10u and 10v components"
     },
     "tp": {
-      "name": "6-hour total precipitation",
+      "name": "24h total precipitation",
       "units": "m",
       "type": "calculated",
-      "description": "6-hour total precipitation",
+      "description": "24h total precipitation",
       "param_id": "228.128",
       "climate_param": "tp"
     },
     "lsp": {
-      "name": "6-hour large-scale precipitation", 
+      "name": "24h large-scale precipitation", 
       "units": "m",
       "type": "calculated",
-      "description": "6-hour large-scale precipitation",
+      "description": "24h large-scale precipitation",
       "param_id": "142.128"
     },
     "cp": {
-      "name": "6-hour convective precipitation",
+      "name": "24h convective precipitation",
       "units": "m", 
       "type": "calculated",
-      "description": "6-hour convective precipitation",
+      "description": "24h convective precipitation",
       "param_id": "143.128"
     }
   },

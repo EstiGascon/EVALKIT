@@ -25,7 +25,6 @@ class WeatherMapHandler:
         self.observation_markers = {}
         self.observation_stations_gdf = None
 
-        self.drawing_mode = False
         self.last_draw_time = 0
 
         self.forecast_layer_group = None
@@ -33,14 +32,10 @@ class WeatherMapHandler:
 
         self.center_protection_enabled = True
         self.allowed_to_change_center = False
-        self.protected_center = None
-        self.protected_zoom = None
-        self.view_state_locked = False
 
         self.last_click_time = 0
         self.last_click_coords = None
         self.click_dedupe_threshold = 0.1
-        self.event_counter = 0
 
         self.auto_plotting_enabled = True
         self.data_loaded = False
@@ -126,6 +121,14 @@ class WeatherMapHandler:
 
         self.update_bbox_visualization()
 
+    def update_obs_legend(self, vmin, vmax, unit=""):
+        """Update observation legend (no-op, legend is in the UI widget obs_colorbar)."""
+        pass
+
+    def hide_obs_legend(self):
+        """Hide the observation legend (no-op, legend is in the UI widget obs_colorbar)."""
+        pass
+
     def _temporarily_allow_view_changes(self):
         """Context manager to temporarily allow view changes."""
 
@@ -149,7 +152,6 @@ class WeatherMapHandler:
             if coordinates:
                 lat, lon = coordinates
 
-                self.event_counter += 1
                 current_time = time.time()
 
                 if (
@@ -381,7 +383,6 @@ class WeatherMapHandler:
 
             self.last_click_time = 0
             self.last_click_coords = None
-            self.event_counter = 0
 
             if hasattr(self.ui, "callbacks") and self.ui.callbacks:
                 if hasattr(self.ui.callbacks, "plotting_manager"):
@@ -472,7 +473,7 @@ class WeatherMapHandler:
         elif action == "deleted":
             self._clear_current_rectangle()
 
-    def update_bbox_visualization(self, preserve_center=True):
+    def update_bbox_visualization(self):
         """Update the bounding box visualization on the map."""
         self._clear_current_rectangle()
 
@@ -688,32 +689,70 @@ class WeatherMapHandler:
             self.map_widget.center = self.default_center
             self.map_widget.zoom = self.default_zoom
 
-    def add_observation_marker(self, marker_data):
-        """Add observation station marker to map."""
+    def add_observation_marker(self, marker_data, on_click=None):
+        """Add observation station marker to map.
+
+        Parameters
+        ----------
+        marker_data : dict
+            Marker properties (station_id, lat, lon, color, popup_info).
+        on_click : callable, optional
+            Callback invoked when the marker is clicked.  Receives
+            ``station_id``, ``lat``, ``lon`` as keyword arguments.
+        """
         try:
             station_id = marker_data["station_id"]
             lat = marker_data["lat"]
             lon = marker_data["lon"]
+            fill_color = marker_data.get("color", "#949190")
 
             marker = ipyleaflet.CircleMarker(
                 location=(lat, lon),
-                radius=8,
-                color="#949190",
-                fill_color="#949190",
-                fill_opacity=0.8,
+                radius=5,
+                color=fill_color,
+                fill_color=fill_color,
+                fill_opacity=0.85,
                 opacity=1.0,
-                weight=2,
+                weight=1,
             )
 
             popup_html = marker_data.get(
                 "popup_info", f"<div>Station {station_id}</div>"
             )
-            marker.popup = ipyleaflet.Popup(
+            popup = ipyleaflet.Popup(
                 child=widgets.HTML(popup_html),
                 close_button=True,
                 auto_close=True,
                 max_width=300,
             )
+            marker.popup = popup
+
+            # Show popup on hover
+            def _on_hover(marker_ref=marker, **kwargs):
+                try:
+                    if marker_ref.popup and marker_ref.popup not in self.map_widget.layers:
+                        marker_ref.popup.location = marker_ref.location
+                        self.map_widget.add(marker_ref.popup)
+                except Exception:
+                    pass
+
+            def _on_mouseout(marker_ref=marker, **kwargs):
+                try:
+                    if marker_ref.popup and marker_ref.popup in self.map_widget.layers:
+                        self.map_widget.remove(marker_ref.popup)
+                except Exception:
+                    pass
+
+            marker.on_mouseover(_on_hover)
+            marker.on_mouseout(_on_mouseout)
+
+            if on_click is not None:
+                def _on_click(sid=station_id, la=lat, lo=lon, cb=on_click, **kwargs):
+                    try:
+                        cb(station_id=sid, lat=la, lon=lo)
+                    except Exception:
+                        pass
+                marker.on_click(_on_click)
 
             self.observation_markers[station_id] = marker
             self.observation_layer_group.add_layer(marker)

@@ -65,6 +65,8 @@ class WidgetObserverManager:
                 "start_date",
                 "time",
                 "grid_resolution",
+                "rd_class",
+                "rd_expver",
                 "preview_btn",
                 "retrieve_btn",
                 "north",
@@ -92,6 +94,11 @@ class WidgetObserverManager:
                 if not selected_models:
                     self.widgets["forecast_steps"].options = []
                     return
+
+                # Show class/expver inputs only when rd-experiment is selected
+                rd_selected = "rd-experiment" in selected_models
+                self.widgets["rd_class"].layout.display = "block" if rd_selected else "none"
+                self.widgets["rd_expver"].layout.display = "block" if rd_selected else "none"
 
                 start_date = self.widgets["start_date"].value
 
@@ -241,9 +248,11 @@ class WidgetObserverManager:
                 current_mode = self.widgets["retrieve_observations"].value
 
                 if current_mode == "browse":
+                    # Enable browse widgets
                     self.widgets["browse_obs_btn"].disabled = False
                     self.widgets["obs_folder_path_input"].disabled = False
-                elif current_mode == "retrieve":
+                    
+                    # Disable retrieval widgets
                     retrieval_widgets = [
                         "obs_sources",
                         "obs_period",
@@ -251,23 +260,42 @@ class WidgetObserverManager:
                         "obs_end_date",
                         "obs_output_dir",
                         "retrieve_obs_btn",
-                        "stvl_path",
+                        "vino_path",
+                    ]
+                    for widget_name in retrieval_widgets:
+                        if widget_name in self.widgets:
+                            self.widgets[widget_name].disabled = True
+                            
+                elif current_mode == "retrieve":
+                    # Enable retrieval widgets
+                    retrieval_widgets = [
+                        "obs_sources",
+                        "obs_period",
+                        "obs_start_date",
+                        "obs_end_date",
+                        "obs_output_dir",
+                        "retrieve_obs_btn",
+                        "vino_path",
                     ]
                     for widget_name in retrieval_widgets:
                         if widget_name in self.widgets:
                             self.widgets[widget_name].disabled = False
 
+                    # Disable browse widgets
                     self.widgets["browse_obs_btn"].disabled = True
+                    self.widgets["obs_folder_path_input"].disabled = True
             else:
+                # Disable all observation widgets when observations are disabled
                 all_obs_widgets = [
                     "browse_obs_btn",
+                    "obs_folder_path_input",
                     "obs_sources",
                     "obs_period",
                     "obs_start_date",
                     "obs_end_date",
                     "obs_output_dir",
                     "retrieve_obs_btn",
-                    "stvl_path",
+                    "vino_path",
                 ]
                 for widget_name in all_obs_widgets:
                     if widget_name in self.widgets:
@@ -280,6 +308,7 @@ class WidgetObserverManager:
 
             if has_observations:
                 if is_retrieve_mode:
+                    # Enable retrieval widgets
                     retrieval_widgets = [
                         "obs_sources",
                         "obs_period",
@@ -287,14 +316,21 @@ class WidgetObserverManager:
                         "obs_end_date",
                         "obs_output_dir",
                         "retrieve_obs_btn",
-                        "stvl_path",
+                        "vino_path",
                     ]
                     for widget_name in retrieval_widgets:
                         if widget_name in self.widgets:
                             self.widgets[widget_name].disabled = False
 
+                    # Disable browse widgets
                     self.widgets["browse_obs_btn"].disabled = True
+                    self.widgets["obs_folder_path_input"].disabled = True
                 else:
+                    # Enable browse widgets
+                    self.widgets["browse_obs_btn"].disabled = False
+                    self.widgets["obs_folder_path_input"].disabled = False
+                    
+                    # Disable retrieval widgets
                     retrieval_widgets = [
                         "obs_sources",
                         "obs_period",
@@ -302,12 +338,11 @@ class WidgetObserverManager:
                         "obs_end_date",
                         "obs_output_dir",
                         "retrieve_obs_btn",
-                        "stvl_path",
+                        "vino_path",
                     ]
                     for widget_name in retrieval_widgets:
                         if widget_name in self.widgets:
                             self.widgets[widget_name].disabled = True
-                    self.widgets["browse_obs_btn"].disabled = False
 
             self.layout_manager.update_observation_section(change["new"])
 
@@ -319,17 +354,16 @@ class WidgetObserverManager:
             on_obs_retrieval_mode_change, names="value"
         )
 
-        def on_obs_period_change(change):  # noqa: ARG001
+        def on_obs_period_change(change):
             if (
                 self.widgets["retrieve_observations"].value == "retrieve"
                 and self.widgets["processing_param"].value != "none"
             ):
                 forecast_param = self.widgets["processing_param"].value
-                self.ui.update_observation_retrieval_from_forecast_param(forecast_param)
+                self.ui.update_period_dependent_settings_from_change(
+                    forecast_param, change["new"]
+                )
 
-        self.widgets["retrieve_observations"].observe(
-            on_obs_retrieval_mode_change, names="value"
-        )
         self.widgets["obs_period"].observe(on_obs_period_change, names="value")
 
     def _setup_parameter_observers(self):
@@ -476,6 +510,17 @@ class WidgetObserverManager:
         self.widgets["clear_drawings_btn"].on_click(self.ui._clear_drawings)
         self.widgets["reset_btn"].on_click(self.ui._reset_all)
         self.widgets["retrieve_obs_btn"].on_click(self.ui._handle_retrieve_observations)
+
+        def on_obs_time_prev(b):  # noqa: ARG001
+            if self.callbacks and hasattr(self.callbacks, "observation_handler"):
+                self.callbacks.observation_handler.step_observation_time(-1)
+
+        def on_obs_time_next(b):  # noqa: ARG001
+            if self.callbacks and hasattr(self.callbacks, "observation_handler"):
+                self.callbacks.observation_handler.step_observation_time(1)
+
+        self.widgets["obs_time_prev_btn"].on_click(on_obs_time_prev)
+        self.widgets["obs_time_next_btn"].on_click(on_obs_time_next)
 
         def on_clear_all_points(button):  # noqa: ARG001
             if self.ui.map_handler:

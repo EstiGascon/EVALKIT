@@ -7,9 +7,6 @@ import xarray as xr
 class GribResolutionExtractor:
     """Extract grid resolution information from ECMWF GRIB files."""
 
-    def __init__(self):  # noqa: D107
-        pass
-
     def get_resolution_from_xarray(self, data: xr.DataArray) -> dict[str, Any]:
         """Extract resolution from xarray DataArray (most common method)."""
         resolution_info = {}
@@ -57,19 +54,22 @@ class GribResolutionExtractor:
             if hasattr(data, "metadata"):
                 metadata = data.metadata()
 
+                lon_resolution = None
+                lat_resolution = None
                 if "iDirectionIncrement" in metadata:
                     lon_resolution = metadata["iDirectionIncrement"] / 1000000.0
                 if "jDirectionIncrement" in metadata:
                     lat_resolution = metadata["jDirectionIncrement"] / 1000000.0
 
-                resolution_info.update(
-                    {
-                        "lat_resolution_deg": lat_resolution,
-                        "lon_resolution_deg": lon_resolution,
-                        "lat_resolution_km": lat_resolution * 111.32,
-                        "lon_resolution_km": lon_resolution * 111.32,
-                    }
-                )
+                if lon_resolution is not None and lat_resolution is not None:
+                    resolution_info.update(
+                        {
+                            "lat_resolution_deg": lat_resolution,
+                            "lon_resolution_deg": lon_resolution,
+                            "lat_resolution_km": lat_resolution * 111.32,
+                            "lon_resolution_km": lon_resolution * 111.32,
+                        }
+                    )
 
         except Exception as e:
             print(f"Could not extract resolution from earthkit: {e}")

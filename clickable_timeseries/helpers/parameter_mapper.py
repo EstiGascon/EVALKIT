@@ -201,6 +201,20 @@ class ConfigurationManager:
             else "ifs_variable"
         )
 
+    def get_model_max_step(self, model: str) -> int | None:
+        """Return the max_step for a model's step pattern, or None if unrestricted.
+
+        Args:
+            model: Model name
+
+        Returns:
+            Maximum forecast step in hours, or None if no cap is defined.
+
+        """
+        pattern_name = self.get_step_pattern(model)
+        pattern = self.step_patterns.get(pattern_name, {})
+        return pattern.get("max_step")
+
     def generate_steps(
         self,
         start_step: int,
@@ -250,6 +264,16 @@ class ConfigurationManager:
 
         """
         interval = pattern.get("interval", 1)
+
+        # Respect max_step defined in the pattern (e.g. ifs4km-single caps at 120 h).
+        # Without this cap, a date range > 5 days would request steps beyond 120
+        # for ifs4km-single, causing the MARS retrieval to fail.
+        max_step = pattern.get("max_step")
+        if max_step is not None:
+            end_step = min(end_step, max_step)
+
+        if start_step > end_step:
+            return []
 
         if start_step % interval == 0:
             adjusted_start = start_step

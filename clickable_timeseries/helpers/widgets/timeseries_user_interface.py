@@ -128,6 +128,8 @@ class TimeseriesUI:
                         self.widgets["east"].value,
                     ],
                     "grid": grid,
+                    "rd_class": self.widgets["rd_class"].value.strip(),
+                    "rd_expver": self.widgets["rd_expver"].value.strip(),
                 }
             )
 
@@ -197,10 +199,10 @@ class TimeseriesUI:
                 model_short in key.lower() for key in available_models.keys()
             )
 
-            if has_data:
-                self.widgets[checkbox_name].layout.display = "block"
-            else:
-                self.widgets[checkbox_name].layout.display = "none"
+            # Always keep visible; disable (and uncheck) when no data is loaded.
+            self.widgets[checkbox_name].layout.display = "block"
+            self.widgets[checkbox_name].disabled = not has_data
+            if not has_data:
                 self.widgets[checkbox_name].value = False
 
     def update_bbox_from_map(self, bbox):
@@ -329,6 +331,37 @@ class TimeseriesUI:
 
             except ImportError:
                 self._show_retriever_not_available()
+
+    def update_period_dependent_settings_from_change(self, forecast_param, new_period):
+        """Update period-dependent settings when user changes the period dropdown."""
+        try:
+            retriever = ObservationsRetriever()
+
+            param_mapping = {
+                "2t": "2t",
+                "2d": "2d",
+                "tp": "tp",
+                "tp_deaccum": "tp",
+                "10ff": "10ff",
+                "10fg": "10fg",
+                "2t_24h_max": "tmax",
+                "2t_24h_min": "tmin",
+                "2d_24h_max": "2d",
+                "2d_24h_min": "2d",
+                "10ff_daily": "10ff",
+                "10fg_6h": "10fg",
+                "10fg_12h": "10fg",
+                "10fg_24h": "10fg",
+            }
+
+            obs_param = param_mapping.get(forecast_param)
+            if not obs_param:
+                return
+
+            param_info = retriever.get_parameter_info(obs_param)
+            self._update_period_dependent_settings(obs_param, param_info, new_period)
+        except Exception as e:
+            print(f"⚠️ Error updating period settings: {e}")
 
     def _validate_file_path(self, model_type):
         """Validate the entered file path for a specific model type."""
@@ -466,6 +499,29 @@ class TimeseriesUI:
             if not self.selected_observation_folder:
                 return
 
+            # Check folder exists and contains GEO files
+            folder_path = self.selected_observation_folder
+            if not os.path.isdir(folder_path):
+                StatusMessageHandler.show_obs_error(
+                    self.widgets["obs_info_display"],
+                    f"❌ Observation folder does not exist:<br>"
+                    f"<code>{folder_path}</code>",
+                )
+                self.observation_parameter_validated = False
+                return
+
+            from helpers.stations_manipulating import GeoDataProcessor
+            geo_files = GeoDataProcessor.get_geo_files(folder_path)
+            if not geo_files:
+                StatusMessageHandler.show_obs_error(
+                    self.widgets["obs_info_display"],
+                    f"❌ No observation data files found in folder:<br>"
+                    f"<code>{folder_path}</code><br>"
+                    f"Expected files matching pattern: <code>*_obs_*.geo</code>",
+                )
+                self.observation_parameter_validated = False
+                return
+
             selected_param = self.widgets["processing_param"].value
 
             if selected_param == "none":
@@ -491,11 +547,27 @@ class TimeseriesUI:
                 return
 
             parameter_matches = False
-            if detected_param == selected_param:
-                parameter_matches = True
-            elif selected_param == "tp_deaccum" and detected_param == "tp":
-                parameter_matches = True
-            elif selected_param == "tp" and detected_param == "tp":
+
+            # Map forecast param to expected obs param for comparison
+            forecast_to_obs = {
+                "2t": "2t",
+                "2d": "2d",
+                "tp": "tp",
+                "tp_deaccum": "tp",
+                "10ff": "10ff",
+                "10fg": "10fg",
+                "2t_24h_max": "tmax",
+                "2t_24h_min": "tmin",
+                "2d_24h_max": "2d",
+                "2d_24h_min": "2d",
+                "10ff_daily": "10ff",
+                "10fg_6h": "10fg",
+                "10fg_12h": "10fg",
+                "10fg_24h": "10fg",
+                "10fg_48h": "10fg",
+            }
+            expected_obs = forecast_to_obs.get(selected_param, selected_param)
+            if detected_param == expected_obs:
                 parameter_matches = True
 
             if parameter_matches:
@@ -554,10 +626,10 @@ class TimeseriesUI:
 
         # Get defaults from config
         default_params = self.config_manager.get_default_parameters()
-        default_model = self.config_manager.get_default_model()
+        model_options = self.config_manager.get_models_for_ui()
 
         self.widgets["param"].value = default_params
-        self.widgets["model"].value = [default_model]
+        self.widgets["model"].value = [key for _, key in model_options]
 
         self._clear_file_selection()
 
@@ -566,9 +638,131 @@ class TimeseriesUI:
             self.map_handler.clear_all_points()
             self.map_handler.clear_observation_markers()
 
+        for wkey in ("obs_time_explorer", "obs_colorbar"):
+            if wkey in self.widgets:
+                self.widgets[wkey].layout.display = "none"
+        for wkey in ("obs_time_prev_btn", "obs_time_next_btn"):
+            if wkey in self.widgets:
+                self.widgets[wkey].disabled = True
+
+    def get_vino_path(self):
+        """Get the VINO executable path from the UI widget."""
+        if "vino_path" in self.widgets:
+            return self.widgets["vino_path"].value.strip()
+        return None
+
+    # Keep backward-compatible alias
+    get_stvl_path = get_vino_path
+
     def _handle_retrieve_observations(self, button):
         """Handle observation retrieval button click."""
-        pass
+        try:
+            # Validate required settings
+            vino_path = self.get_vino_path()
+            if not vino_path:
+                StatusMessageHandler.show_obs_error(
+                    self.widgets["obs_info_display"],
+                    "❌ VINO executable path is not set. Please configure the path.",
+                )
+                return
+
+            # Get the forecast parameter to determine obs parameter
+            forecast_param = self.widgets["processing_param"].value
+            if forecast_param == "none":
+                StatusMessageHandler.show_obs_warning(
+                    self.widgets["obs_info_display"],
+                    "⚠️ Please select a forecast parameter first before retrieving observations.",
+                )
+                return
+
+            # Map forecast param to obs param
+            param_mapping = {
+                "2t": "2t",
+                "2d": "2d",
+                "tp": "tp",
+                "tp_deaccum": "tp",
+                "10ff": "10ff",
+                "10fg": "10fg",
+                "2t_24h_max": "tmax",
+                "2t_24h_min": "tmin",
+                "2d_24h_max": "2d",
+                "2d_24h_min": "2d",
+                "10ff_daily": "10ff",
+                "10fg_6h": "10fg",
+                "10fg_12h": "10fg",
+                "10fg_24h": "10fg",
+            }
+
+            obs_param = param_mapping.get(forecast_param)
+            if not obs_param:
+                StatusMessageHandler.show_obs_error(
+                    self.widgets["obs_info_display"],
+                    f"❌ No observation parameter available for forecast parameter: {forecast_param}",
+                )
+                return
+
+            # Get retrieval settings from widgets
+            sources_tuple = self.widgets["obs_sources"].value
+            sources = " ".join(sources_tuple) if sources_tuple else "synop hdobs"
+
+            start_date = self.widgets["obs_start_date"].value
+            end_date = self.widgets["obs_end_date"].value
+            output_dir = self.widgets["obs_output_dir"].value.strip()
+
+            # Get period if applicable
+            retriever = ObservationsRetriever(vino_path)
+            param_info = retriever.get_parameter_info(obs_param)
+            period = None
+            if param_info["type"] == "period":
+                period = self.widgets["obs_period"].value
+
+            # Show progress
+            StatusMessageHandler.show_obs_info(
+                self.widgets["obs_info_display"],
+                f"⏳ Retrieving {obs_param} observations from {sources}...",
+            )
+
+            # Setup the retriever in callbacks and execute
+            if self.callbacks:
+                self.callbacks.setup_observation_retrieval(vino_path)
+                result = self.callbacks.retrieve_observations_with_parameter_logic(
+                    parameter_name=obs_param,
+                    start_date=start_date,
+                    end_date=end_date,
+                    sources=sources,
+                    period=period,
+                    output_dir=output_dir,
+                )
+
+                if result.get("success"):
+                    output_path = result.get("output_dir", output_dir)
+                    StatusMessageHandler.show_obs_success(
+                        self.widgets["obs_info_display"],
+                        f"✅ Successfully retrieved {obs_param} observations!<br>"
+                        f"Output directory: <code>{output_path}</code>",
+                    )
+
+                    # Auto-set the observation folder and validate
+                    self.selected_observation_folder = output_path
+                    self.widgets["obs_folder_path_input"].value = output_path
+                    self._perform_automatic_validation()
+                else:
+                    error_msg = result.get("error", "Unknown error")
+                    StatusMessageHandler.show_obs_error(
+                        self.widgets["obs_info_display"],
+                        f"❌ Retrieval failed: {error_msg}",
+                    )
+            else:
+                StatusMessageHandler.show_obs_error(
+                    self.widgets["obs_info_display"],
+                    "❌ Callbacks not initialized. Please restart the interface.",
+                )
+
+        except Exception as e:
+            StatusMessageHandler.show_obs_error(
+                self.widgets["obs_info_display"],
+                f"❌ Error during observation retrieval: {str(e)}",
+            )
 
     def _update_local_info_display(self):
         """Update the local info display with current file status."""
@@ -692,6 +886,7 @@ class TimeseriesUI:
         times = param_info["times_map"].get(period_int, "00")
 
         times_description = {
+            1: "24 times daily (hourly)",
             6: "4 times daily: 00, 06, 12, 18 UTC",
             12: "2 times daily: 00, 12 UTC",
             24: "1 time daily: 00 UTC",

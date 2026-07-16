@@ -190,6 +190,13 @@ class ConfigurationManager:
         """Generate steps with fixed interval (e.g., 6-hourly)."""
         interval = pattern["interval"]
 
+        # Respect max_step defined in the pattern (e.g. ifs4km-single caps at 120 h).
+        # Without this cap, a date range > 5 days would request steps beyond 120
+        # for ifs4km-single, causing the MARS retrieval to fail.
+        max_step = pattern.get("max_step")
+        if max_step is not None:
+            end_step = min(end_step, max_step)
+
         if start_step % interval == 0:
             adjusted_start = start_step
         else:

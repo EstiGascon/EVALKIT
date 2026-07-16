@@ -149,7 +149,7 @@ class ParameterProcessor:
                 )
                 return
 
-            if self.callbacks.plotting_manager is None:
+            if self.callbacks.plotting_manager is not None:
                 if self.callbacks.map_handler:
                     self.callbacks.map_handler.sync_colors_with_plotting_manager(
                         self.callbacks.plotting_manager
@@ -203,7 +203,7 @@ class ParameterProcessor:
 
                     if point_id in self.multi_point_data:
                         success = self.callbacks._add_observation_data(
-                            self.multi_point_data[point_id], station_id
+                            self.multi_point_data[point_id], station_id, selected_param
                         )
                         if success:
                             if hasattr(self.ui.widgets, "observations_checkbox"):

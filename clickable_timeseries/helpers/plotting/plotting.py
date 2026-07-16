@@ -83,13 +83,14 @@ class PlottingManager:
                 f"Unsupported precipitation conversion: {from_unit} to {to_unit}"
             )
 
-    def process_data_units(self, data, parameter_name, data_source="observed"):  # noqa: PLR0911, PLR0912
+    def process_data_units(self, data, parameter_name, data_source="observed", model_name=None):  # noqa: PLR0911, PLR0912
         """Process data to ensure correct units.
 
         Args:
             data: The data to process
             parameter_name (str): Name of the parameter
             data_source (str): Source of data ('observed' or 'forecast')
+            model_name (str): Model name (e.g. 'aifs-single', 'ifs-single')
 
         Returns:
             Processed data with correct units
@@ -149,28 +150,20 @@ class PlottingManager:
             if len(sample_values) == 0:
                 return data
 
-            max_val = np.max(sample_values)
-
-            if data_source == "forecast":
-                return self.convert_precipitation(
-                    data, from_unit="m", to_unit=self.style_config.precipitation_unit
-                )
-            elif max_val > 10:  # noqa: PLR2004
-                return self.convert_precipitation(
-                    data, from_unit="mm", to_unit=self.style_config.precipitation_unit
-                )
-            elif max_val > 0.1:  # noqa: PLR2004
-                return self.convert_precipitation(
-                    data, from_unit="mm", to_unit=self.style_config.precipitation_unit
-                )
-            elif max_val <= 0.1:  # noqa: PLR2004
-                return self.convert_precipitation(
-                    data, from_unit="m", to_unit=self.style_config.precipitation_unit
-                )
+            if data_source == "forecast" and model_name is not None:
+                # AIFS outputs precipitation already in mm; IFS outputs in m
+                if "aifs" in model_name.lower():
+                    from_unit = "mm"
+                else:
+                    from_unit = "m"
+            elif data_source == "observed":
+                from_unit = "mm"
             else:
-                return self.convert_precipitation(
-                    data, from_unit="mm", to_unit=self.style_config.precipitation_unit
-                )
+                from_unit = "m"
+
+            return self.convert_precipitation(
+                data, from_unit=from_unit, to_unit=self.style_config.precipitation_unit
+            )
 
         else:
             return data
@@ -218,7 +211,7 @@ class PlottingManager:
             station_distances = forecast_processor.get_station_distances()
 
         if len(loaded_stations) == 0:
-            return self._create_no_stations_plot(config, forecast_data_to_plot)
+            return self._create_no_stations_plot(config)
 
         if not active_stations:
             return self._create_no_active_stations_plot(
@@ -357,7 +350,7 @@ class PlottingManager:
         return fig
 
     # Private helper methods
-    def _create_no_stations_plot(self, config, forecast_data_to_plot):
+    def _create_no_stations_plot(self, config):
         """Create plot when no stations are loaded."""
         fig = go.Figure()
 
@@ -506,7 +499,7 @@ class PlottingManager:
 
                         if len(forecast_ts) > 0:
                             processed_forecast_ts = self.process_data_units(
-                                forecast_ts, parameter_name, "forecast"
+                                forecast_ts, parameter_name, "forecast", model_name=model_name
                             )
                             station_info = stations_gdf.loc[station_id]
                             model_color = self.style_config.get_data_color(
@@ -677,12 +670,6 @@ class PlottingManager:
         if selected_models is None:
             selected_models = []
 
-        forecast_points = len(
-            [p for p in multi_point_data.values() if p.get("type") == "forecast"]
-        )
-        obs_points = len(
-            [p for p in multi_point_data.values() if p.get("type") == "observation"]
-        )
         single_point_mode = len(multi_point_data) == 1
 
         traces_added = 0
@@ -713,26 +700,35 @@ class PlottingManager:
                 ):
                     continue
 
-                if single_point_mode:
+                style = self.style_config.get_model_style(model_name)
+
+                # Observations are always black regardless of point or mode.
+                if model_name == "Observations":
+                    line_color = self.style_config.get_model_color("Observations")
+                elif single_point_mode:
+                    # One location → distinguish models by their fixed colour.
                     line_color = self.style_config.get_single_point_color(
                         model_name, point_color
                     )
                 else:
+                    # Multiple locations → point colour is the primary differentiator
+                    # (matches the map pin colour).  Model is distinguished by
+                    # dash pattern and marker symbol.
                     line_color = point_color
-
-                style = self.style_config.get_model_style(model_name)
 
                 if isinstance(forecast_df, pd.DataFrame):
                     processed_data = self.process_data_units(
                         forecast_df["forecast_value"],
                         parameter_name,
                         "observed" if model_name == "Observations" else "forecast",
+                        model_name=model_name,
                     )
                 else:
                     processed_data = self.process_data_units(
                         forecast_df,
                         parameter_name,
                         "observed" if model_name == "Observations" else "forecast",
+                        model_name=model_name,
                     )
 
                 distance_km = distance_info.get(model_name, 0)
@@ -760,29 +756,18 @@ class PlottingManager:
                     go.Scatter(
                         x=processed_data.index,
                         y=processed_data.values,
-                        mode="lines+markers",
+                        mode="lines",
                         name=legend_name,
                         line={
                             "color": line_color,
                             "width": style["width"],
                             "dash": style["dash"],
                         },
-                        marker={
-                            "size": 5 if model_name == "Observations" else 4,
-                            "color": line_color,
-                            "symbol": style["symbol"],
-                        },
                         hovertemplate="%{hovertext}<extra></extra>",
                         hovertext=hover_text,
                     )
                 )
                 traces_added += 1
-
-        title_parts = []
-        if forecast_points > 0:
-            title_parts.append(f"{forecast_points} forecast point(s)")
-        if obs_points > 0:
-            title_parts.append(f"{obs_points} observation station(s)")
 
         title_text = f"{config['title']}"
 
@@ -878,7 +863,14 @@ class PlottingManager:
         return filtered_obs
 
     def _align_forecast_models(self, forecast_data_dict):
-        """Align AIFS and IFS forecasts to cover the same time period."""
+        """Align forecast models to a common start time.
+
+        Each model is clipped to start at the latest common start time so that
+        all traces share the same time origin.  The end of each model is NOT
+        clipped: a model with fewer steps (e.g. IFS 4.4 km capped at 120 h)
+        will simply show a shorter line rather than being suppressed or causing
+        other models to be trimmed.
+        """
         forecast_models = {
             k: v
             for k, v in forecast_data_dict.items()
@@ -888,25 +880,16 @@ class PlottingManager:
         if len(forecast_models) < 2:  # noqa: PLR2004
             return forecast_data_dict
 
-        common_start = None
-        common_end = None
-
-        for _model_name, forecast_df in forecast_models.items():
-            model_start = forecast_df.index.min()
-            model_end = forecast_df.index.max()
-
-            if common_start is None or model_start > common_start:
-                common_start = model_start
-            if common_end is None or model_end < common_end:
-                common_end = model_end
+        # Align all models to the latest start so they share a common origin.
+        common_start = max(
+            df.index.min() for df in forecast_models.values()
+        )
 
         aligned_forecast_data = forecast_data_dict.copy()
 
         for model_name in forecast_models.keys():
             original_df = forecast_data_dict[model_name]
-            aligned_df = original_df[
-                (original_df.index >= common_start) & (original_df.index <= common_end)
-            ]
+            aligned_df = original_df[original_df.index >= common_start]
             aligned_forecast_data[model_name] = aligned_df
 
         return aligned_forecast_data

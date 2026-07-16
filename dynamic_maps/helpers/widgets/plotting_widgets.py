@@ -175,11 +175,6 @@ class PlottingWidgets:
 
         self.widgets["param_selection"].observe(on_parameter_change, names="value")
 
-        def on_colorscale_change(change):
-            print(f"Colorscale changed to: {change['new']}")
-
-        self.widgets["colorscale"].observe(on_colorscale_change, names="value")
-
         def select_all_steps(button):  # noqa: ARG001
             all_values = [
                 option[1] for option in self.widgets["step_selection_multi"].options
@@ -235,14 +230,7 @@ class PlottingWidgets:
         if unit_options:
             self.widgets["unit"].value = unit_options[0][1]
 
-        if param_type in ["precipitation", "accumulated_precipitation"]:
-            self.widgets["colorscale"].options = [
-                ("Basic Palette (0.5mm-500mm)", 1),
-                ("Extended Palette (0.5mm-1000mm)", 2),
-                ("High Intensity Palette (10mm-700mm)", 3),
-            ]
-            self.widgets["colorscale"].layout.display = "block"
-        else:
+        if param_type not in ["precipitation", "accumulated_precipitation"]:
             self.widgets["colorscale"].options = [("Default", 1)]
             self.widgets["colorscale"].value = 1
 
@@ -631,8 +619,8 @@ class PlottingWidgets:
 
             return fig
 
-        except Exception as e:
-            raise e
+        except Exception:
+            raise
 
     def on_generate_plot(self, button):
         """Update generate plot handler with proper error handling."""
@@ -681,31 +669,6 @@ class PlottingWidgets:
             except Exception as e:
                 print(f"Critical plotting error: {str(e)}")
                 traceback.print_exc()
-
-    def get_plot_parameters(self):
-        """Get current plot parameters as a dictionary."""
-        plot_type = self.widgets["plot_type"].value
-        selected_param = self.widgets["param_selection"].value
-        is_calculated = (
-            selected_param in self.calculated_parameters if selected_param else False
-        )
-
-        if is_calculated and selected_param != "10ff":
-            selected_steps = []
-        elif plot_type in ["static", "dynamic"]:
-            selected_steps = [self.widgets["step_selection_single"].value]
-        else:
-            selected_steps = list(self.widgets["step_selection_multi"].value)
-
-        return {
-            "parameter": selected_param,
-            "plot_type": plot_type,
-            "steps": selected_steps,
-            "unit": self.widgets["unit"].value,
-            "palette_color": self.widgets["colorscale"].value,
-            "opacity": self.widgets["opacity"].value,
-            "dataset": self.weather_callbacks.get_dataset(),
-        }
 
     def display_interface(self):
         """Display the plotting interface."""

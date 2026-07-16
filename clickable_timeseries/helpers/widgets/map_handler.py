@@ -1,10 +1,19 @@
-import random
 import time
 import traceback
 from math import asin, cos, radians, sin, sqrt
 
 import ipyleaflet
 import ipywidgets as widgets
+
+
+def haversine_distance(lat1, lon1, lat2, lon2):
+    """Calculate distance between two points in km."""
+    R = 6371
+    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+    return 2 * R * asin(sqrt(a))
 
 
 class WeatherMapHandler:
@@ -22,11 +31,22 @@ class WeatherMapHandler:
 
         self.selected_points = {}
         self.point_counter = 0
-        self.active_point_colors = [
-            f"#{num:06x}" for num in random.sample(range(0x1000000), 100)
+        # Okabe-Ito palette (Wong 2011, Nature Methods) — safe for all major
+        # forms of colour blindness. Black is excluded here (reserved for
+        # Observations in the plot). The list is long enough for the maximum
+        # number of selectable points by cycling through the palette.
+        _cb_palette = [
+            "#0072B2",  # Blue
+            "#D55E00",  # Vermillion
+            "#009E73",  # Bluish Green
+            "#E69F00",  # Orange
+            "#CC79A7",  # Reddish Purple
+            "#56B4E9",  # Sky Blue
         ]
+        self.active_point_colors = (_cb_palette * 20)[:100]
 
         self.observation_markers = {}
+        self.observation_geojson_layer = None
         self.observation_stations_gdf = None
 
         self.drawing_mode = False
@@ -44,7 +64,6 @@ class WeatherMapHandler:
         self.last_click_time = 0
         self.last_click_coords = None
         self.click_dedupe_threshold = 0.1
-        self.event_counter = 0
 
         self.setup_map()
 
@@ -124,7 +143,6 @@ class WeatherMapHandler:
             if coordinates:
                 lat, lon = coordinates
 
-                self.event_counter += 1
                 current_time = time.time()
 
                 if (
@@ -159,11 +177,6 @@ class WeatherMapHandler:
         """Process click events with bbox constraint validation."""
         if not self._is_point_in_bbox(lat, lon):
             return
-
-        for point_id, point_info in self.selected_points.items():
-            print(
-                f"      - {point_id}: {point_info['type']} at {point_info['lat']:.4f}, {point_info['lon']:.4f}"
-            )
 
         clicked_point_id = self._find_nearby_point(lat, lon, threshold_km=1)
 
@@ -261,11 +274,9 @@ class WeatherMapHandler:
 
             if obs_point_id in self.selected_points:
                 del self.selected_points[obs_point_id]
-
-                if station_id in self.observation_markers:
-                    self._update_observation_marker_color(
-                        station_id, "#949190", selected=False
-                    )
+                self._update_observation_marker_color(
+                    station_id, "#949190", selected=False
+                )
 
             elif (
                 hasattr(self.ui, "callbacks")
@@ -292,10 +303,9 @@ class WeatherMapHandler:
                     "station_id": station_id,
                 }
 
-                if station_id in self.observation_markers:
-                    self._update_observation_marker_color(
-                        station_id, color, selected=True
-                    )
+                self._update_observation_marker_color(
+                    station_id, color, selected=True
+                )
 
                 if (
                     hasattr(self.ui, "widgets")
@@ -314,58 +324,43 @@ class WeatherMapHandler:
             return False
 
     def _update_observation_marker_color(self, station_id, color, selected=False):
-        """Update the color of an observation station marker."""
+        """Add or remove a colored overlay marker for an observation station."""
         try:
-            if station_id not in self.observation_markers:
+            # Remove existing overlay if present
+            if station_id in self.observation_markers:
+                old = self.observation_markers.pop(station_id)
+                try:
+                    self.observation_layer_group.remove_layer(old)
+                except Exception:
+                    pass
+
+            if not selected:
+                # Deselected — the GeoJSON layer shows the gray circle
                 return
 
-            marker = self.observation_markers[station_id]
+            # Create colored overlay for selected station
+            gdf = getattr(getattr(self.ui, "callbacks", None), "observation_stations_gdf", None)
+            if gdf is None or station_id not in gdf.index:
+                return
 
-            if marker in self.observation_layer_group.layers:
-                self.observation_layer_group.remove_layer(marker)
+            info = gdf.loc[station_id]
+            lat, lon = info["latitude"], info["longitude"]
 
-            if (
-                hasattr(self.ui, "callbacks")
-                and hasattr(self.ui.callbacks, "observation_stations_gdf")
-                and self.ui.callbacks.observation_stations_gdf is not None
-                and station_id in self.ui.callbacks.observation_stations_gdf.index
-            ):
-                station_info = self.ui.callbacks.observation_stations_gdf.loc[
-                    station_id
-                ]
-                lat = station_info["latitude"]
-                lon = station_info["longitude"]
+            new_marker = ipyleaflet.CircleMarker(
+                location=(lat, lon),
+                radius=10,
+                color=color,
+                fill_color=color,
+                fill_opacity=0.9,
+                opacity=1.0,
+                weight=3,
+            )
 
-                new_marker = ipyleaflet.CircleMarker(
-                    location=(lat, lon),
-                    radius=10 if selected else 8,
-                    color=color,
-                    fill_color=color,
-                    fill_opacity=0.8,
-                    opacity=1.0,
-                    weight=3 if selected else 2,
-                )
+            self.observation_markers[station_id] = new_marker
+            if f"obs_{station_id}" in self.selected_points:
+                self.selected_points[f"obs_{station_id}"]["marker"] = new_marker
 
-                popup_html = widgets.HTML(
-                    value=f"""
-                    <div style="padding: 10px; border-left: 4px solid {color};">
-                        <b style="color: {color};">🔬 Station {station_id}</b><br>
-                        Lat: {lat:.4f}°<br>
-                        Lon: {lon:.4f}°<br>
-                        <span style="color: {color}; font-weight: bold;">●</span> {"Selected" if selected else "Available"}<br>
-                        <em>Click to {"deselect" if selected else "select"}</em>
-                    </div>
-                    """
-                )
-                new_marker.popup = ipyleaflet.Popup(
-                    child=popup_html, close_button=True, max_width=200
-                )
-
-                self.observation_markers[station_id] = new_marker
-                if f"obs_{station_id}" in self.selected_points:
-                    self.selected_points[f"obs_{station_id}"]["marker"] = new_marker
-
-                self.observation_layer_group.add_layer(new_marker)
+            self.observation_layer_group.add_layer(new_marker)
 
         except Exception as e:
             print(f" Error updating marker color: {e}")
@@ -396,16 +391,6 @@ class WeatherMapHandler:
 
     def _find_nearby_point(self, lat, lon, threshold_km=8):
         """Find if there's a selected point nearby."""
-
-        def haversine_distance(lat1, lon1, lat2, lon2):
-            """Calculate distance between two points in km."""
-            R = 6371
-            lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
-            dlat = lat2 - lat1
-            dlon = lon2 - lon1
-            a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
-            return 2 * R * asin(sqrt(a))
-
         for point_id, point_info in self.selected_points.items():
             distance = haversine_distance(
                 lat, lon, point_info["lat"], point_info["lon"]
@@ -417,16 +402,6 @@ class WeatherMapHandler:
 
     def _find_nearby_observation_station(self, lat, lon, threshold_km=8):
         """Find if there's an observation station nearby."""
-
-        def haversine_distance(lat1, lon1, lat2, lon2):
-            """Calculate distance between two points in km."""
-            R = 6371
-            lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
-            dlat = lat2 - lat1
-            dlon = lon2 - lon1
-            a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
-            return 2 * R * asin(sqrt(a))
-
         if (
             hasattr(self.ui, "callbacks")
             and hasattr(self.ui.callbacks, "observation_stations_gdf")
@@ -551,7 +526,6 @@ class WeatherMapHandler:
 
         self.last_click_time = 0
         self.last_click_coords = None
-        self.event_counter = 0
 
         self._update_unified_plot()
 
@@ -561,43 +535,33 @@ class WeatherMapHandler:
             except Exception as e:
                 print(f"Could not clear drawing control: {e}")
 
-    def add_observation_marker(self, marker_data):
-        """Add observation station marker to map."""
-        try:
-            station_id = marker_data["station_id"]
-            lat = marker_data["lat"]
-            lon = marker_data["lon"]
+    def set_observation_geojson(self, geojson_data):
+        """Set observation stations as a single GeoJSON layer (fast)."""
+        if self.observation_geojson_layer is not None:
+            try:
+                self.observation_layer_group.remove_layer(
+                    self.observation_geojson_layer
+                )
+            except Exception:
+                pass
 
-            marker = ipyleaflet.CircleMarker(
-                location=(lat, lon),
-                radius=8,
-                color="#949190",
-                fill_color="#949190",
-                fill_opacity=0.8,
-                opacity=1.0,
-                weight=2,
-            )
-
-            popup_html = marker_data.get(
-                "popup_info", f"<div>Station {station_id}</div>"
-            )
-            marker.popup = ipyleaflet.Popup(
-                child=widgets.HTML(popup_html),
-                close_button=True,
-                auto_close=True,
-                max_width=300,
-            )
-
-            self.observation_markers[station_id] = marker
-            self.observation_layer_group.add_layer(marker)
-
-        except Exception as e:
-            print(f"    Error adding observation marker: {e}")
+        self.observation_geojson_layer = ipyleaflet.GeoJSON(
+            data=geojson_data,
+            point_style={
+                "radius": 5,
+                "color": "#949190",
+                "fillColor": "#949190",
+                "fillOpacity": 0.8,
+                "weight": 2,
+            },
+        )
+        self.observation_layer_group.add(self.observation_geojson_layer)
 
     def clear_observation_markers(self):
-        """Clear all observation markers."""
+        """Clear all observation markers and GeoJSON layer."""
         self.observation_layer_group.clear_layers()
         self.observation_markers.clear()
+        self.observation_geojson_layer = None
 
     def sync_colors_with_plotting_manager(self, plotting_manager):
         """Synchronize colors with plotting manager."""

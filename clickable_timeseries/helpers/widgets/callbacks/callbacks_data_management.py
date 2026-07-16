@@ -36,23 +36,18 @@ class DataManagement:
         selected_models = []
 
         if hasattr(self.ui, "widgets"):
-            if (
-                "aifs_checkbox" in self.ui.widgets
-                and self.ui.widgets["aifs_checkbox"].value
-            ):
-                all_datasets = self.get_all_datasets()
-                for model_key in all_datasets.keys():
-                    if "aifs" in model_key.lower():
-                        selected_models.append(model_key)
-
-            if (
-                "ifs_checkbox" in self.ui.widgets
-                and self.ui.widgets["ifs_checkbox"].value
-            ):
-                all_datasets = self.get_all_datasets()
-                for model_key in all_datasets.keys():
-                    if "ifs" in model_key.lower() and "aifs" not in model_key.lower():
-                        selected_models.append(model_key)
+            all_datasets = self.get_all_datasets()
+            models = self.ui.config_manager.models
+            for model_key in models.keys():
+                model_short = model_key.split("-")[0]
+                checkbox_name = f"{model_short}_checkbox"
+                if (
+                    checkbox_name in self.ui.widgets
+                    and self.ui.widgets[checkbox_name].value
+                ):
+                    for dk in all_datasets.keys():
+                        if dk == model_short or dk.startswith(model_key + "_"):
+                            selected_models.append(dk)
 
             if (
                 "observations_checkbox" in self.ui.widgets
@@ -61,7 +56,6 @@ class DataManagement:
             ):
                 selected_models.append("Observations")
 
-        print(f"🔧 Selected models from UI: {selected_models}")
         return selected_models
 
     def on_retrieve_click(self, button):  # noqa: PLR0915
@@ -82,8 +76,23 @@ class DataManagement:
                 )
                 return
 
+            if "rd-experiment" in selected_models and not params.get("rd_expver"):
+                StatusMessageHandler.show_error(
+                    self.ui.widgets["mars_info_display"],
+                    "RD Experiment is selected but no experiment version (expver) was provided. "
+                    "Please fill in the Exp. version field.",
+                )
+                return
+
+            if "rd-experiment" in selected_models and not params.get("rd_class"):
+                StatusMessageHandler.show_error(
+                    self.ui.widgets["mars_info_display"],
+                    "RD Experiment is selected but no MARS class was provided. "
+                    "Please fill in the Class field.",
+                )
+                return
+
             selected_steps = params.get("selected_steps", [])
-            print(f"DEBUG: Selected steps from UI: {selected_steps}")
 
             self.ui.widgets["mars_info_display"].value = f"""
                 <div style="background-color: #B2EBF2; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #0097A7;">
@@ -117,6 +126,8 @@ class DataManagement:
                         custom_area=params["area"],
                         grid=params["grid"],
                         custom_steps=selected_steps,
+                        expver=params.get("rd_expver") if model == "rd-experiment" else None,
+                        custom_class=params.get("rd_class") if model == "rd-experiment" else None,
                     )
 
                     retrieval_results[model] = result
@@ -138,7 +149,19 @@ class DataManagement:
 
                         print(f"✅ Successfully retrieved data for {model}")
                     else:
-                        print(f"❌ Failed to retrieve data for {model}")
+                        error_detail = ""
+                        req_params = {}
+                        if isinstance(result, dict) and "error" in result:
+                            error_detail = result["error"]
+                            req_params = result.get("request_params", {})
+                            print(f"❌ Failed to retrieve data for {model}: {error_detail}")
+                            print(f"   Request params: {req_params}")
+                        else:
+                            print(f"❌ Failed to retrieve data for {model}: result={result}")
+                        retrieval_results[model] = {
+                            "error": error_detail or "Unknown error",
+                            "request_params": req_params,
+                        }
 
                 except Exception as e:
                     error_message = str(e)
@@ -154,9 +177,13 @@ class DataManagement:
                 retrieval_results, successful_retrievals, skipped_params_info
             )
 
-            if successful_retrievals > 0:
-                self.callbacks.refresh_available_parameters()
+            # Always refresh available parameters and model checkboxes so the UI
+            # reflects the true state of loaded_datasets — even when 0 models
+            # succeeded this run (stale checkboxes from a previous retrieval
+            # would otherwise persist).
+            self.callbacks.refresh_available_parameters()
 
+            if successful_retrievals > 0:
                 if self.ui.widgets["has_observations"].value == "yes":
                     self.ui.widgets["observations_checkbox"].disabled = False
                     self.ui.widgets["observations_checkbox"].value = True
@@ -218,31 +245,56 @@ class DataManagement:
                     + "</p>"
                 )
 
+            failed_details = ""
+            for fm in failed_models:
+                err = retrieval_results.get(fm, {})
+                if isinstance(err, dict) and "error" in err:
+                    failed_details += f"<p style='font-size: 0.9em; color: #D84315;'><strong>{fm}:</strong> {err['error']}</p>"
+                else:
+                    failed_details += f"<p style='font-size: 0.9em; color: #D84315;'><strong>{fm}:</strong> No error details available</p>"
+
             self.ui.widgets["mars_info_display"].value = f"""
                 <div style="background-color: #FFF3E0; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #FF9800;">
                     <h4 style="margin-top: 0; color: #E65100;">⚠️ Partial Success</h4>
-                    <p><strong>Successful ({successful_retrievals}/{total_models}):</strong> {", ".join(successful_models)}</p>
-                    <p><strong>Failed:</strong> {", ".join(failed_models)}</p>
+                    <p><strong>Successful ({successful_retrievals}/{total_models}):</strong> {', '.join(successful_models)}</p>
+                    <p><strong>Failed:</strong></p>
+                    {failed_details}
                     {skip_info}
                     <p>You can proceed with analysis using the successfully retrieved data.</p>
                 </div>
             """
         else:
+            failed_details = ""
+            for model, result in retrieval_results.items():
+                if isinstance(result, dict) and "error" in result:
+                    req_params = result.get("request_params", {})
+                    req_str = ""
+                    if req_params:
+                        req_items = ", ".join(f"{k}={v}" for k, v in req_params.items())
+                        req_str = f"<p style='font-size: 0.85em; color: #5d4037; font-family: monospace;'>Request: {req_items}</p>"
+                    failed_details += f"<p style='font-size: 0.9em; color: #D84315;'><strong>{model}:</strong> {result['error']}</p>{req_str}"
+                else:
+                    failed_details += f"<p style='font-size: 0.9em; color: #D84315;'><strong>{model}:</strong> No error details available</p>"
             self.ui.widgets["mars_info_display"].value = f"""
                 <div style="background-color: #ffebee; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #f44336;">
                     <h4 style="margin-top: 0; color: #c62828;">❌ All Retrievals Failed</h4>
                     <p>Failed to retrieve data for any of the {total_models} selected model(s).</p>
-                    <p>Please check your parameters and try again.</p>
+                    {failed_details}
                 </div>
             """
 
     def on_load_both_files_click(self, button):  # noqa: PLR0912, PLR0915
         """Handle load both files button click with validation."""
         try:
-            aifs_path = self.ui.selected_file_paths.get("aifs")
-            ifs_path = self.ui.selected_file_paths.get("ifs")
+            configured_models = self.ui.config_manager.models
+            selected_paths = {
+                model_key.split("-")[0]: self.ui.selected_file_paths.get(model_key.split("-")[0])
+                for model_key in configured_models.keys()
+            }
+            # Keep only models that have a file path specified
+            active_paths = {ms: fp for ms, fp in selected_paths.items() if fp}
 
-            if not aifs_path and not ifs_path:
+            if not active_paths:
                 self.ui.widgets["local_info_display"].value = """
                     <div style="background-color: #FFEBEE; padding: 10px; border-radius: 5px; margin: 5px 0; border-left: 4px solid #F44336;">
                         <h4 style="margin-top: 0; color: #F44336;">No Files Selected</h4>
@@ -253,23 +305,15 @@ class DataManagement:
 
             validation_failed = False
 
-            if aifs_path and not self.ui._validate_file_path("aifs"):
-                self.ui.widgets["local_info_display"].value = f"""
-                    <div style="background-color: #FFEBEE; padding: 10px; border-radius: 5px; margin: 5px 0; border-left: 4px solid #F44336;">
-                        <h4 style="margin-top: 0; color: #F44336;">AIFS File Invalid</h4>
-                        <p>File not found or not accessible: {aifs_path}</p>
-                    </div>
-                """
-                validation_failed = True
-
-            if ifs_path and not self.ui._validate_file_path("ifs"):
-                self.ui.widgets["local_info_display"].value = f"""
-                    <div style="background-color: #FFEBEE; padding: 10px; border-radius: 5px; margin: 5px 0; border-left: 4px solid #F44336;">
-                        <h4 style="margin-top: 0; color: #F44336;">IFS File Invalid</h4>
-                        <p>File not found or not accessible: {ifs_path}</p>
-                    </div>
-                """
-                validation_failed = True
+            for model_short, file_path in active_paths.items():
+                if not self.ui._validate_file_path(model_short):
+                    self.ui.widgets["local_info_display"].value = f"""
+                        <div style="background-color: #FFEBEE; padding: 10px; border-radius: 5px; margin: 5px 0; border-left: 4px solid #F44336;">
+                            <h4 style="margin-top: 0; color: #F44336;">{model_short.upper()} File Invalid</h4>
+                            <p>File not found or not accessible: {file_path}</p>
+                        </div>
+                    """
+                    validation_failed = True
 
             if validation_failed:
                 return
@@ -280,75 +324,44 @@ class DataManagement:
 
             results = {}
 
-            if aifs_path and self.data_loader:
-                result = self.data_loader.load_grib_file(aifs_path)
-                results["aifs"] = result
-                if self._is_load_successful(result):
-                    self.loaded_datasets["aifs"] = result
-
-            if ifs_path and self.data_loader:
-                result = self.data_loader.load_grib_file(ifs_path)
-                results["ifs"] = result
-                if self._is_load_successful(result):
-                    self.loaded_datasets["ifs"] = result
+            for model_short, file_path in active_paths.items():
+                if self.data_loader:
+                    result = self.data_loader.load_grib_file(file_path)
+                    results[model_short] = result
+                    if self._is_load_successful(result):
+                        self.loaded_datasets[model_short] = result
 
             if any(self._is_load_successful(result) for result in results.values()):
                 try:
                     bbox_coords = []
 
-                    if "aifs" in self.loaded_datasets:
-                        try:
-                            first_field = self.loaded_datasets["aifs"][0]
-                            west = first_field.metadata(
-                                "longitudeOfFirstGridPointInDegrees"
-                            )
-                            east = first_field.metadata(
-                                "longitudeOfLastGridPointInDegrees"
-                            )
-                            north = first_field.metadata(
-                                "latitudeOfFirstGridPointInDegrees"
-                            )
-                            south = first_field.metadata(
-                                "latitudeOfLastGridPointInDegrees"
-                            )
+                    for model_short in results:
+                        if model_short in self.loaded_datasets and self._is_load_successful(results[model_short]):
+                            try:
+                                first_field = self.loaded_datasets[model_short][0]
+                                west = first_field.metadata(
+                                    "longitudeOfFirstGridPointInDegrees"
+                                )
+                                east = first_field.metadata(
+                                    "longitudeOfLastGridPointInDegrees"
+                                )
+                                north = first_field.metadata(
+                                    "latitudeOfFirstGridPointInDegrees"
+                                )
+                                south = first_field.metadata(
+                                    "latitudeOfLastGridPointInDegrees"
+                                )
 
-                            bbox_coords.append(
-                                {
-                                    "west": min(west, east),
-                                    "east": max(west, east),
-                                    "north": max(north, south),
-                                    "south": min(north, south),
-                                }
-                            )
-                        except Exception as e:
-                            print(f"⚠️ Could not extract AIFS bbox: {e}")
-
-                    if "ifs" in self.loaded_datasets:
-                        try:
-                            first_field = self.loaded_datasets["ifs"][0]
-                            west = first_field.metadata(
-                                "longitudeOfFirstGridPointInDegrees"
-                            )
-                            east = first_field.metadata(
-                                "longitudeOfLastGridPointInDegrees"
-                            )
-                            north = first_field.metadata(
-                                "latitudeOfFirstGridPointInDegrees"
-                            )
-                            south = first_field.metadata(
-                                "latitudeOfLastGridPointInDegrees"
-                            )
-
-                            bbox_coords.append(
-                                {
-                                    "west": min(west, east),
-                                    "east": max(west, east),
-                                    "north": max(north, south),
-                                    "south": min(north, south),
-                                }
-                            )
-                        except Exception as e:
-                            print(f"⚠️ Could not extract IFS bbox: {e}")
+                                bbox_coords.append(
+                                    {
+                                        "west": min(west, east),
+                                        "east": max(west, east),
+                                        "north": max(north, south),
+                                        "south": min(north, south),
+                                    }
+                                )
+                            except Exception as e:
+                                print(f"⚠️ Could not extract {model_short.upper()} bbox: {e}")
 
                     if bbox_coords:
                         final_west = max(bbox["west"] for bbox in bbox_coords)
@@ -539,23 +552,31 @@ class DataManagement:
 
             all_datasets = self.get_all_datasets()
 
-            has_aifs_data = any("aifs" in key.lower() for key in all_datasets.keys())
-            has_ifs_data = any(
-                "ifs" in key.lower() and "aifs" not in key.lower()
-                for key in all_datasets.keys()
-            )
+            models = self.ui.config_manager.models
+            for model_key in models.keys():
+                model_short = model_key.split("-")[0]
+                checkbox_name = f"{model_short}_checkbox"
+                has_data = any(
+                    k == model_short or k.startswith(model_key + "_")
+                    for k in all_datasets.keys()
+                )
+                if checkbox_name in self.ui.widgets:
+                    # Always keep the checkbox visible so the user can see all configured
+                    # models. Disable (and uncheck) it when no data has been loaded for
+                    # that model instead of hiding it completely.
+                    self.ui.widgets[checkbox_name].layout.display = "block"
+                    self.ui.widgets[checkbox_name].disabled = not has_data
+                    if has_data:
+                        # Re-enable and check the box whenever data is present, so that
+                        # a model retrieved after a previous failure (e.g. IFS 4.4 km on
+                        # a second attempt) is automatically selected for plotting.
+                        self.ui.widgets[checkbox_name].value = True
+                    else:
+                        self.ui.widgets[checkbox_name].value = False
 
-            if has_aifs_data:
-                self.ui.widgets["aifs_checkbox"].layout.display = "block"
-            else:
-                self.ui.widgets["aifs_checkbox"].layout.display = "none"
-                self.ui.widgets["aifs_checkbox"].value = False
-
-            if has_ifs_data:
-                self.ui.widgets["ifs_checkbox"].layout.display = "block"
-            else:
-                self.ui.widgets["ifs_checkbox"].layout.display = "none"
-                self.ui.widgets["ifs_checkbox"].value = False
+            # Sync obs date pickers to the forecast valid-datetime range so that
+            # VINO retrieval defaults always cover the same period as the forecast.
+            self._sync_obs_dates_from_forecast(all_datasets)
 
             try:
                 current_param = self.ui.widgets["processing_param"].value
@@ -769,26 +790,61 @@ class DataManagement:
         else:
             print("❌ MARS retrieval result: FAILED")
 
+    def _sync_obs_dates_from_forecast(self, all_datasets):
+        """Sync obs_start_date / obs_end_date widgets to the forecast valid-datetime range.
+
+        This ensures that the VINO observation retrieval defaults cover the same
+        period as the loaded forecast so the 'Explore observation lead times'
+        explorer shows dates that align with the forecast.
+        """
+        try:
+            if not all_datasets:
+                return
+            if "obs_start_date" not in self.ui.widgets or "obs_end_date" not in self.ui.widgets:
+                return
+
+            import pandas as pd
+
+            all_datetimes = []
+            for model_key, dataset in all_datasets.items():
+                try:
+                    if hasattr(dataset, "metadata"):
+                        vdt = dataset.metadata("valid_datetime")
+                        if vdt is not None:
+                            all_datetimes.extend(pd.to_datetime(vdt).tolist())
+                except Exception:
+                    pass
+
+            if not all_datetimes:
+                return
+
+            forecast_start = min(all_datetimes).date()
+            forecast_end = max(all_datetimes).date()
+
+            self.ui.widgets["obs_start_date"].value = forecast_start
+            self.ui.widgets["obs_end_date"].value = forecast_end
+
+        except Exception as e:
+            print(f"⚠️ Could not sync obs dates from forecast: {e}")
+
     def _is_load_successful(self, result):
         """Enhanced load success checker with better detection logic."""
-        if isinstance(result, dict):
-            success_indicators = [
-                result.get("success", False),
-                not result.get("error", False),
-                not result.get("failed", False),
-                bool(result.get("data")),
-                bool(result.get("dataset")),
-            ]
+        if result is None or result is False:
+            return False
 
-            is_successful = any(success_indicators)
-            print(
-                f"🔍 Dict result success indicators: {success_indicators} -> {is_successful}"
-            )
-            return is_successful
+        if isinstance(result, dict):
+            # Explicit error → always fail
+            if result.get("error"):
+                return False
+
+            # Avoid calling bool() on dataset objects (earthkit FieldList,
+            # numpy arrays, etc.) — use identity check instead.
+            has_data = (result.get("data") is not None) or (result.get("dataset") is not None)
+            explicit_success = result.get("success", False)
+
+            return has_data or explicit_success
         else:
-            is_successful = result is not None and result is not False
-            print(f"🔍 Non-dict result success: {is_successful}")
-            return is_successful
+            return True
 
     def _update_load_summary_display(self, results):
         """Update the local info display with loading summary."""

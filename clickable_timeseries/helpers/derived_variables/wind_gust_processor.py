@@ -3,6 +3,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from earthkit.geo import nearest_point_haversine
 
 
 class WindGustProcessor:
@@ -103,6 +104,11 @@ class WindGustProcessor:
             if len(gust_fields) == 0:
                 return None
 
+            # Extract lat/lon arrays once from the first field (shared grid)
+            latlon = gust_fields.to_latlon()
+            grid_lat = latlon["lat"]
+            grid_lon = latlon["lon"]
+
             gust_records = []
 
             for gust_field in gust_fields:
@@ -110,12 +116,10 @@ class WindGustProcessor:
                     gust_values = gust_field.values
 
                     time_info = self._extract_time_info(gust_field)
-                    coord_info = self._extract_coordinate_info(gust_field)
 
                     record = {
                         "values": gust_values,
                         "time": time_info,
-                        "coordinates": coord_info,
                         "metadata": {
                             "param": "10fg",
                             "shortName": "fg",
@@ -131,7 +135,13 @@ class WindGustProcessor:
                     continue
 
             if gust_records:
-                return {"records": gust_records, "model": model_name, "param": "10fg"}
+                return {
+                    "records": gust_records,
+                    "model": model_name,
+                    "param": "10fg",
+                    "grid_lat": grid_lat,
+                    "grid_lon": grid_lon,
+                }
             else:
                 return None
 
@@ -178,50 +188,6 @@ class WindGustProcessor:
 
         except Exception as e:
             print(f"Error extracting time info: {e}")
-            return {}
-
-    def _extract_coordinate_info(self, field):
-        """Extract coordinate-related information from a wind gust field's metadata.
-
-        Args:
-            field: Wind gust field containing metadata.
-
-        Returns:
-            dict: Dictionary containing coordinate-related metadata keys and values.
-
-        """
-        try:
-            metadata = field.metadata()
-
-            coord_info = {}
-            coord_keys = [
-                "latitudeOfFirstGridPointInDegrees",
-                "longitudeOfFirstGridPointInDegrees",
-                "latitudeOfLastGridPointInDegrees",
-                "longitudeOfLastGridPointInDegrees",
-                "iDirectionIncrementInDegrees",
-                "jDirectionIncrementInDegrees",
-                "Ni",
-                "Nj",
-            ]
-
-            for key in coord_keys:
-                if hasattr(metadata, "get"):
-                    value = metadata.get(key)
-                    if value is not None:
-                        coord_info[key] = value
-                else:
-                    try:
-                        value = metadata(key)
-                        if value is not None:
-                            coord_info[key] = value
-                    except Exception:
-                        continue
-
-            return coord_info
-
-        except Exception as e:
-            print(f"Error extracting coordinate info: {e}")
             return {}
 
     def _calculate_rolling_maximum(self, gust_data, model_name: str, period_hours: int):  # noqa: PLR0912, PLR0915
@@ -282,6 +248,8 @@ class WindGustProcessor:
                     "model": model_name,
                     "param": f"10fg_{period_hours}h",
                     "aggregation": f"{period_hours}h_rolling_max_native",
+                    "grid_lat": gust_data.get("grid_lat"),
+                    "grid_lon": gust_data.get("grid_lon"),
                 }
 
             step_record_map = {}
@@ -328,7 +296,6 @@ class WindGustProcessor:
                 rolling_record = {
                     "values": max_values,
                     "time": rolling_time,
-                    "coordinates": current_record["coordinates"],
                     "metadata": {
                         "param": f"10fg_{period_hours}h",
                         "shortName": f"fg_{period_hours}h",
@@ -349,6 +316,8 @@ class WindGustProcessor:
                     "model": model_name,
                     "param": f"10fg_{period_hours}h",
                     "aggregation": f"{period_hours}h_rolling_max",
+                    "grid_lat": gust_data.get("grid_lat"),
+                    "grid_lon": gust_data.get("grid_lon"),
                 }
             else:
                 return None
@@ -384,26 +353,32 @@ class WindGustProcessor:
                 return None, 0.0
 
             gust_data = self.processed_datasets[dataset_key]
+            grid_lat = gust_data.get("grid_lat")
+            grid_lon = gust_data.get("grid_lon")
+
+            if grid_lat is None or grid_lon is None:
+                print(f"No grid coordinates for {dataset_key}")
+                return None, 0.0
+
+            # Find nearest grid point once (same grid for all records)
+            coord = [lat, lon]
+            idx, distance = nearest_point_haversine(coord, (grid_lat, grid_lon))
+            distance_km = distance[0] / 1000.0
 
             timeseries_data = []
 
             for record in gust_data["records"]:
                 try:
                     values = record["values"]
-                    coordinates = record["coordinates"]
                     time_info = record["time"]
 
-                    value_at_location, distance = self._extract_nearest_value(
-                        values, coordinates, lat, lon
-                    )
-
+                    value_at_location = float(values[idx])
                     time_index = self._create_time_index(time_info)
 
                     timeseries_data.append(
                         {
                             "time": time_index,
                             "forecast_value": value_at_location,
-                            "distance_km": distance,
                         }
                     )
 
@@ -416,41 +391,13 @@ class WindGustProcessor:
                 df.set_index("time", inplace=True)
                 df.sort_index(inplace=True)
 
-                avg_distance = np.mean([d["distance_km"] for d in timeseries_data])
-                return df[["forecast_value"]], avg_distance
+                return df[["forecast_value"]], distance_km
             else:
                 return None, 0.0
 
         except Exception as e:
             print(f"Error extracting wind gust timeseries: {e}")
             return None, 0.0
-
-    def _extract_nearest_value(self, values, coordinates, target_lat, target_lon):
-        """Extract value at the nearest grid point for a given latitude and longitude.
-
-        Args:
-            values (np.ndarray): Array of wind gust values.
-            coordinates (dict): Grid coordinate information.
-            target_lat (float): Latitude of target location.
-            target_lon (float): Longitude of target location.
-
-        Returns:
-            tuple[float, float]: Value at nearest grid point and distance (currently always 0.0).
-
-        """
-        try:
-            if len(values.shape) == 1:
-                idx = (int(abs(target_lat * 1000)) + int(abs(target_lon * 1000))) % len(
-                    values
-                )
-                return float(values[idx]), 0.0
-            else:
-                lat_idx = int(abs(target_lat * 10)) % values.shape[0]
-                lon_idx = int(abs(target_lon * 10)) % values.shape[1]
-                return float(values[lat_idx, lon_idx]), 0.0
-        except Exception as e:
-            print(f"Error extracting nearest value: {e}")
-            return 0.0, 0.0
 
     def _create_time_index(self, time_info):
         """Create a pandas Timestamp or DatetimeIndex from the field's time information.

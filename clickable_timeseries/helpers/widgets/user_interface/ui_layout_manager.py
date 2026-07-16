@@ -62,8 +62,32 @@ class UILayoutManager:
 
     def _create_visualization_section(self):
         """Create the visualization accordion section."""
+        # Model visibility toggle row — reuses the same checkbox widget objects
+        # from the Parameter & Analysis section so state stays in sync.
+        model_toggle_controls = []
+        for model_key, model_info in self.config_manager.models.items():
+            model_short = model_key.split("-")[0]
+            checkbox_name = f"{model_short}_checkbox"
+            if checkbox_name in self.widgets:
+                model_toggle_controls.append(self.widgets[checkbox_name])
+        if "observations_checkbox" in self.widgets:
+            model_toggle_controls.append(self.widgets["observations_checkbox"])
+
+        model_visibility_row = widgets.VBox(
+            [
+                widgets.HTML(
+                    "<b style='color:#171A35; font-size:0.9em;'>Model Visibility:</b>"
+                ),
+                widgets.HBox(
+                    model_toggle_controls,
+                    layout=widgets.Layout(flex_wrap="wrap", margin="2px 0 6px 0"),
+                ),
+            ],
+            layout=widgets.Layout(margin="4px 0 4px 0"),
+        )
+
         plot_section = widgets.VBox(
-            [self.widgets["plot_output"]],
+            [model_visibility_row, self.widgets["plot_output"]],
             layout=widgets.Layout(width="65%", margin="0 10px 0 0"),
         )
 
@@ -151,6 +175,7 @@ class UILayoutManager:
                         ),
                         self.widgets["param"],
                         self.widgets["model"],
+                        widgets.HBox([self.widgets["rd_class"], self.widgets["rd_expver"]]),
                     ]
                 ),
                 # Forecast Configuration
@@ -342,6 +367,8 @@ class UILayoutManager:
                 retrieval_conditional,
                 browsing_conditional,
                 self.widgets["obs_info_display"],
+                self.widgets["obs_time_explorer"],
+                self.widgets["obs_colorbar"],
             ],
             layout=widgets.Layout(width="32%", margin="0 0 0 10px", overflow="visible"),
         )
@@ -353,13 +380,13 @@ class UILayoutManager:
                 widgets.HTML(
                     "<h4 style='color: #50DEA3; margin-bottom: 10px;'>Retrieve from ECMWF</h4>"
                 ),
-                # STVL Configuration
+                # VINO Configuration
                 widgets.VBox(
                     [
                         widgets.HTML(
-                            "<p style='margin: 5px 0; color: #666; font-size: 0.9em;'><b>STVL Configuration:</b></p>"
+                            "<p style='margin: 5px 0; color: #666; font-size: 0.9em;'><b>VINO Configuration:</b></p>"
                         ),
-                        self.widgets["stvl_path"],
+                        self.widgets["vino_path"],
                     ]
                 ),
                 self.widgets["obs_param_info"],

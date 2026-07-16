@@ -21,6 +21,41 @@
       "supports_custom_step_expansion": false,
       "description": "AI-based Integrated Forecasting System",
       "ui_order": 2
+    },
+    "ifs4km-single": {
+      "display_name": "IFS 4.4km",
+      "class": "rd",
+      "expver": "iekm",
+      "stream": "oper",
+      "type": "fc",
+      "levtype": "sfc",
+      "step_pattern": "hourly_120",
+      "supports_custom_step_expansion": false,
+      "description": "IFS high-resolution 4.4km forecast (up to 120h, hourly)",
+      "ui_order": 3
+    },
+    "hybrid-single": {
+      "display_name": "Hybrid IFS",
+      "class": "rd",
+      "expver": "iueu",
+      "stream": "oper",
+      "type": "fc",
+      "levtype": "sfc",
+      "step_pattern": "three_hourly_240",
+      "supports_custom_step_expansion": false,
+      "description": "Hybrid IFS forecast (up to 240h, 3-hourly)",
+      "ui_order": 4
+    },
+    "rd-experiment": {
+      "display_name": "RD Experiment",
+      "class": "rd",
+      "stream": "oper",
+      "type": "fc",
+      "levtype": "sfc",
+      "step_pattern": "ifs_variable",
+      "supports_custom_step_expansion": true,
+      "description": "Custom RD experiment with user-defined expver",
+      "ui_order": 5
     }
   },
   "step_patterns": {
@@ -30,25 +65,112 @@
       "max_step": 360,
       "description": "6-hourly steps from 0 to 360 hours"
     },
+    "hourly_120": {
+      "type": "fixed_interval",
+      "interval": 1,
+      "max_step": 120,
+      "description": "Hourly steps from 0 to 120 hours"
+    },
+    "three_hourly_240": {
+      "type": "fixed_interval",
+      "interval": 3,
+      "max_step": 240,
+      "description": "3-hourly steps from 0 to 240 hours"
+    },
     "ifs_variable": {
       "type": "date_based_intervals",
       "description": "IFS variable step intervals based on forecast date",
       "date_rules": [
         {
           "before": "1990-11-15",
-          "intervals": [[0, 120, 6], [120, 240, 12]]
+          "intervals": [
+            [
+              0,
+              120,
+              6
+            ],
+            [
+              120,
+              240,
+              12
+            ]
+          ]
         },
         {
           "after": "1990-11-15",
           "before": "2011-11-15",
-          "intervals": [[0, 144, 3], [144, 240, 6]]
+          "intervals": [
+            [
+              0,
+              144,
+              3
+            ],
+            [
+              144,
+              240,
+              6
+            ]
+          ]
         },
         {
           "after": "2011-11-15",
-          "intervals": [[0, 90, 1], [90, 144, 3], [144, 240, 6]]
+          "before": "2025-06-17",
+          "intervals": [
+            [
+              0,
+              90,
+              1
+            ],
+            [
+              90,
+              144,
+              3
+            ],
+            [
+              144,
+              240,
+              6
+            ]
+          ]
+        },
+        {
+          "after": "2025-06-16",
+          "intervals": [
+            [
+              0,
+              90,
+              1
+            ],
+            [
+              90,
+              144,
+              3
+            ],
+            [
+              144,
+              360,
+              6
+            ]
+          ]
         }
       ],
-      "default_intervals": [[0, 90, 1], [90, 144, 3], [144, 240, 6]]
+      "default_intervals": [
+        [
+          0,
+          90,
+          1
+        ],
+        [
+          90,
+          144,
+          3
+        ],
+        [
+          144,
+          240,
+          6
+        ]
+      ]
     }
   },
   "parameters": {
@@ -58,7 +180,13 @@
       "display_name": "2m Temperature",
       "units": "K",
       "description": "2 metre temperature",
-      "available_models": ["aifs-single", "ifs-single"],
+      "available_models": [
+        "aifs-single",
+        "ifs-single",
+        "ifs4km-single",
+        "hybrid-single",
+        "rd-experiment"
+      ],
       "category": "temperature",
       "ui_order": 1
     },
@@ -68,7 +196,13 @@
       "display_name": "2m Dewpoint Temperature",
       "units": "K",
       "description": "2 metre dewpoint temperature",
-      "available_models": ["aifs-single", "ifs-single"],
+      "available_models": [
+        "aifs-single",
+        "ifs-single",
+        "ifs4km-single",
+        "hybrid-single",
+        "rd-experiment"
+      ],
       "category": "temperature",
       "ui_order": 2
     },
@@ -78,7 +212,13 @@
       "display_name": "10m U-wind",
       "units": "m s**-1",
       "description": "10 metre U wind component",
-      "available_models": ["aifs-single", "ifs-single"],
+      "available_models": [
+        "aifs-single",
+        "ifs-single",
+        "ifs4km-single",
+        "hybrid-single",
+        "rd-experiment"
+      ],
       "category": "wind",
       "ui_order": 3
     },
@@ -88,7 +228,13 @@
       "display_name": "10m V-wind",
       "units": "m s**-1",
       "description": "10 metre V wind component",
-      "available_models": ["aifs-single", "ifs-single"],
+      "available_models": [
+        "aifs-single",
+        "ifs-single",
+        "ifs4km-single",
+        "hybrid-single",
+        "rd-experiment"
+      ],
       "category": "wind",
       "ui_order": 4
     },
@@ -98,7 +244,12 @@
       "display_name": "Hourly 10m Wind Gust",
       "units": "m s**-1",
       "description": "10 metre wind gust",
-      "available_models": ["ifs-single"],
+      "available_models": [
+        "ifs-single",
+        "ifs4km-single",
+        "hybrid-single",
+        "rd-experiment"
+      ],
       "category": "wind",
       "ui_order": 5
     },
@@ -108,7 +259,13 @@
       "display_name": "Total Precipitation (cumulative)",
       "units": "m",
       "description": "Total precipitation in meters",
-      "available_models": ["aifs-single", "ifs-single"],
+      "available_models": [
+        "aifs-single",
+        "ifs-single",
+        "ifs4km-single",
+        "hybrid-single",
+        "rd-experiment"
+      ],
       "category": "precipitation",
       "ui_order": 6
     },
@@ -118,7 +275,13 @@
       "display_name": "Convective Precipitation",
       "units": "m",
       "description": "Convective precipitation in meters",
-      "available_models": ["aifs-single", "ifs-single"],
+      "available_models": [
+        "aifs-single",
+        "ifs-single",
+        "ifs4km-single",
+        "hybrid-single",
+        "rd-experiment"
+      ],
       "category": "precipitation",
       "ui_order": 7
     },
@@ -128,14 +291,21 @@
       "display_name": "Large Scale Precipitation",
       "units": "m",
       "description": "Large scale precipitation in meters",
-      "available_models": ["ifs-single"],
+      "available_models": [
+        "ifs-single",
+        "ifs4km-single",
+        "hybrid-single",
+        "rd-experiment"
+      ],
       "category": "precipitation",
       "ui_order": 8
     }
   },
   "ui_settings": {
     "default_model": "ifs-single",
-    "default_parameters": ["2t"],
+    "default_parameters": [
+      "2t"
+    ],
     "default_bbox": {
       "north": 72.0,
       "west": -25.0,
@@ -143,6 +313,11 @@
       "east": 45.0
     },
     "default_time": "00:00:00",
-    "available_times": ["00:00:00", "06:00:00", "12:00:00", "18:00:00"]
+    "available_times": [
+      "00:00:00",
+      "06:00:00",
+      "12:00:00",
+      "18:00:00"
+    ]
   }
 }

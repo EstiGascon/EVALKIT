@@ -161,8 +161,15 @@ class ValidationHelperCallbacks:
         """
         errors = []
 
-        if not params.get("model_class"):
-            errors.append("Model class must be selected")
+        selected_models = params.get("selected_models", [])
+        if not selected_models and not params.get("model_class"):
+            errors.append("At least one model must be selected")
+
+        if "custom" in selected_models or params.get("model_class") == "custom":
+            if not params.get("custom_class", "").strip():
+                errors.append("Class is required for Custom RD Experiment (e.g. 'rd')")
+            if not params.get("custom_expver", "").strip():
+                errors.append("Expver is required for Custom RD Experiment (e.g. 'h4gv')")
 
         return errors
 
@@ -519,22 +526,6 @@ class ValidationHelperCallbacks:
             steps = list(range(start, end + 1, 6))
 
         return sorted(set(steps))
-
-    def _get_step_config_for_meteogram(self):
-        """Get step configuration for meteogram plots.
-
-        Returns:
-            dict: Step configuration
-
-        """
-        if hasattr(self.parent, "model_configs"):
-            model_class = getattr(self.parent, "current_model_class", "ifs")
-            return self.parent.model_configs.get(model_class, {}).get("step_config", {})
-
-        return {
-            "type": "intervals",
-            "intervals": [[0, 90, 1], [90, 144, 3], [144, 360, 6]],
-        }
 
     def _add_area_info(self, params):
         """Add geographic area information.

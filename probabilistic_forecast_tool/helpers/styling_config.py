@@ -306,6 +306,7 @@ class StylingConfiguration:
             "#F51329",
             "#B80516",
             "#7D0A15",
+            "#4A0810",
         ]
         self.msl_levels = [
             970,
@@ -370,15 +371,32 @@ class StylingConfiguration:
             303,
             308,
         ]
+        # ECMWF-inspired spectral palette for 500 hPa geopotential height
+        # 17 colors for 18 levels (80 m intervals, 4800–6160 m)
         self.geopotential_colors = [
-            "#B8B8F2",
-            "#82CAF5",
-            "#F25EA6",
-            "#F51329",
-            "#B80516",
-            "#7D0A15",
+            "#660099",  # violet   4800-4880
+            "#0000CC",  # dark blue  4880-4960
+            "#0033FF",  # blue       4960-5040
+            "#0077FF",  # med blue   5040-5120
+            "#00AAFF",  # sky blue   5120-5200
+            "#00CCFF",  # light blue 5200-5280
+            "#00FFEE",  # cyan       5280-5360
+            "#00DD88",  # cyan-green 5360-5440
+            "#00AA44",  # green      5440-5520
+            "#66CC00",  # yel-green  5520-5600
+            "#CCCC00",  # yellow     5600-5680
+            "#FFB800",  # amber      5680-5760
+            "#FF8800",  # orange     5760-5840
+            "#FF5500",  # dk orange  5840-5920
+            "#FF2200",  # red-orange 5920-6000
+            "#CC0000",  # red        6000-6080
+            "#880000",  # dark red   6080-6160
         ]
-        self.geopotential_levels = [48000, 50000, 52000, 54000, 56000, 58000, 60000]
+        # Levels in geopotential height metres (= m²/s² / 9.80665)
+        self.geopotential_levels = [
+            4800, 4880, 4960, 5040, 5120, 5200, 5280, 5360,
+            5440, 5520, 5600, 5680, 5760, 5840, 5920, 6000, 6080, 6160,
+        ]
 
     def _load_config(self):
         """Load configuration from JSON file."""
@@ -570,8 +588,9 @@ class StylingConfiguration:
                     "title": "Mean Sea Level Pressure",
                     "colors": self.msl_colors,
                     "levels": self.msl_levels,
-                    "unit": "Pa",
+                    "unit": "hPa",
                     "label": "Pressure",
+                    "draw_contour_lines": True,
                 }
             )
 
@@ -589,11 +608,12 @@ class StylingConfiguration:
         elif param_type == "geopotential":
             config.update(
                 {
-                    "title": "Geopotential",
+                    "title": "500 hPa Geopotential Height",
                     "colors": self.geopotential_colors,
                     "levels": self.geopotential_levels,
-                    "unit": "m**2/s**2",
-                    "label": "Geopotential",
+                    "unit": "m",
+                    "label": "Geopotential Height",
+                    "draw_contour_lines": True,
                 }
             )
 
@@ -611,9 +631,16 @@ class StylingConfiguration:
         return config
 
     def transform_data_and_levels(  # noqa: PLR0912
-        self, data, parameter_name: str, levels: list, unit: str = None
+        self, data, parameter_name: str, levels: list, unit: str = None,
+        model_class: str = None,
     ):
-        """Transform both data and levels based on input unit."""
+        """Transform both data and levels based on input unit.
+
+        Note: for pressure-type parameters, Pa -> hPa conversion is always
+        applied regardless of `unit`, since the unit hint can be stale (e.g.
+        left over from a previously selected wind parameter) when the unit
+        selector is hidden for pressure.
+        """
         param_type = self._get_parameter_type(parameter_name)
 
         if param_type is None:
@@ -650,27 +677,63 @@ class StylingConfiguration:
             if unit and unit.lower() == "m":
                 transformed_levels = [lvl / 1000 for lvl in transformed_levels]
             elif unit and unit.lower() == "mm":
-                if isinstance(transformed_data, xr.DataArray):
-                    transformed_data = transformed_data * 1000
-                elif isinstance(transformed_data, np.ndarray):
-                    transformed_data = transformed_data * 1000
-                elif (
-                    hasattr(transformed_data, "__getitem__")
-                    and value_name in transformed_data
-                ):
-                    transformed_data[value_name] = transformed_data[value_name] * 1000
+                # AIFS data is already in mm (kg m**-2); only IFS needs m→mm
+                _is_aifs = model_class and model_class.lower() == "aifs"
+                if not _is_aifs:
+                    if isinstance(transformed_data, xr.DataArray):
+                        transformed_data = transformed_data * 1000
+                    elif isinstance(transformed_data, np.ndarray):
+                        transformed_data = transformed_data * 1000
+                    elif (
+                        hasattr(transformed_data, "__getitem__")
+                        and value_name in transformed_data
+                    ):
+                        transformed_data[value_name] = (
+                            transformed_data[value_name] * 1000
+                        )
 
         elif param_type == "pressure":
-            if unit and unit.lower() == "hpa":
+            # Always convert Pa → hPa for pressure-type parameters.  The unit
+            # string is used as a hint but may be stale (e.g. "ms" left over
+            # from a previously selected wind parameter when the unit selector
+            # is hidden for pressure).  We therefore apply the conversion
+            # unconditionally – the source data is always in Pa (GRIB native).
+            if isinstance(transformed_data, xr.DataArray):
+                transformed_data = transformed_data / 100
+            elif isinstance(transformed_data, np.ndarray):
+                transformed_data = transformed_data / 100
+            elif (
+                hasattr(transformed_data, "__getitem__")
+                and value_name in transformed_data
+            ):
+                transformed_data[value_name] = transformed_data[value_name] / 100
+
+        elif param_type == "geopotential":
+            if unit and unit.lower() == "m":
+                # Convert from m²/s² (GRIB native) to geopotential height in metres
+                _g = 9.80665
                 if isinstance(transformed_data, xr.DataArray):
-                    transformed_data = transformed_data / 100
+                    transformed_data = transformed_data / _g
+                    # Clear the GRIB units attribute so earthkit does not attempt
+                    # a second unit conversion when rendering with Style(units="m")
+                    if hasattr(transformed_data, "attrs"):
+                        transformed_data = transformed_data.copy()
+                        transformed_data.attrs.pop("units", None)
+                        transformed_data.attrs.pop("GRIB_units", None)
                 elif isinstance(transformed_data, np.ndarray):
-                    transformed_data = transformed_data / 100
+                    transformed_data = transformed_data / _g
+                elif isinstance(transformed_data, xr.Dataset):
+                    transformed_data = transformed_data / _g
+                    for var in list(transformed_data.data_vars):
+                        if "units" in transformed_data[var].attrs:
+                            transformed_data[var].attrs.pop("units", None)
+                        if "GRIB_units" in transformed_data[var].attrs:
+                            transformed_data[var].attrs.pop("GRIB_units", None)
                 elif (
                     hasattr(transformed_data, "__getitem__")
                     and value_name in transformed_data
                 ):
-                    transformed_data[value_name] = transformed_data[value_name] / 100
+                    transformed_data[value_name] = transformed_data[value_name] / _g
 
         return transformed_data, transformed_levels
 

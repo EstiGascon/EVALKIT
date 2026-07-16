@@ -74,13 +74,14 @@ class EnsembleUI:
     def _initialize_auto_plot_defaults(self):
         """Initialize default values for automatic plotting.
 
-        Sets up default parameter, unit, time step, and palette for
-        automatic plot generation.
+        Sets up default parameter, unit, time step, palette, and
+        precipitation-accumulation window for automatic plot generation.
         """
         self.auto_plot_parameter = "2t"
         self.auto_plot_unit = "celsius"
         self.auto_plot_step = 48
         self.auto_plot_palette = 1
+        self.auto_plot_precip_accumulation = 24  # default accumulation for precip stamps
 
     def _initialize_ui_components(self):
         """Initialize all user interface components.
@@ -214,9 +215,9 @@ class EnsembleUI:
         if plot_type == "cdf":
             return base_params + ["analysis_date", "days_back", "forecast_times"]
         elif plot_type == "meteogram":
-            return base_params + ["forecast_date", "time", "steps", "include_control"]
+            return base_params + ["forecast_date", "time", "steps", "step_frequency", "include_control"]
         else:
-            return base_params + ["forecast_date", "time", "steps"]
+            return base_params + ["forecast_date", "time", "steps", "step_frequency"]
 
     def _load_fallback_config(self):
         """Load fallback configuration if config file not available.
@@ -857,7 +858,11 @@ class EnsembleUI:
 
         """
         for param in plot_config["mars_params"]:
-            if param in self.widgets:
+            if param == "model_class":
+                selected_models = self._get_selected_models()
+                config["parameters"]["model_class"] = selected_models[0]
+                config["parameters"]["selected_models"] = selected_models
+            elif param in self.widgets:
                 config["parameters"][param] = self.widgets[param].value
             elif param == "area":
                 self._collect_area_parameter(config)
@@ -865,6 +870,16 @@ class EnsembleUI:
                 self._collect_grid_parameter(config)
             elif param == "steps" and self.current_plot_type != "cdf":
                 self._collect_steps_parameter(config)
+
+        # Only collect custom experiment overrides when "custom" is one of the selected models
+        selected_models = config["parameters"].get("selected_models", [])
+        if "custom" in selected_models:
+            if "custom_class" in self.widgets:
+                config["parameters"]["custom_class"] = self.widgets["custom_class"].value.strip()
+            if "custom_expver" in self.widgets:
+                config["parameters"]["custom_expver"] = self.widgets["custom_expver"].value.strip()
+            if "custom_include_cf" in self.widgets:
+                config["parameters"]["custom_include_cf"] = self.widgets["custom_include_cf"].value
 
     def _collect_area_parameter(self, config):
         """Collect area boundary parameters.
@@ -898,22 +913,30 @@ class EnsembleUI:
     def _collect_steps_parameter(self, config):
         """Collect forecast step parameters.
 
-        Prioritizes selected steps from display widget, falls back to
-        step range widget if no specific steps are selected.
+        Always computes steps from the text field + frequency dropdown.
+        The steps_display widget is informational only; relying on its
+        persisted value causes stale Jupyter notebook state to silently
+        limit the step range (e.g. to T+60h from a previous session).
 
         Args:
             config: Configuration dictionary to populate.
 
         """
-        if (
-            self.widgets["steps_display"].value
-            and len(self.widgets["steps_display"].value) > 0
-        ):
-            config["parameters"]["selected_steps"] = list(
-                self.widgets["steps_display"].value
-            )
+        # Always store the step_frequency so retrieval can enforce it per model
+        frequency = self.widgets["step_frequency"].value if "step_frequency" in self.widgets else 1
+        config["parameters"]["step_frequency"] = frequency
+
+        step_range = self.widgets["steps"].value
+
+        if self._is_step_range(step_range) and frequency > 1:
+            available = self._get_available_steps_for_range(step_range)
+            filtered = [s for s in available if s % frequency == 0]
+            if filtered:
+                config["parameters"]["selected_steps"] = filtered
+            else:
+                config["parameters"]["steps"] = step_range
         else:
-            config["parameters"]["steps"] = self.widgets["steps"].value
+            config["parameters"]["steps"] = step_range
 
     def _collect_specific_parameters(self, config, plot_config):
         """Collect plot-specific parameters from widgets.
@@ -1095,6 +1118,7 @@ class EnsembleUI:
                     step=self.auto_plot_step,
                     unit_value=self.auto_plot_unit,
                     palette_value=self.auto_plot_palette,
+                    precip_accumulation=self.auto_plot_precip_accumulation,
                 )
         except Exception as e:
             self.show_alert_message(
@@ -1499,7 +1523,7 @@ class EnsembleUI:
             Boolean indicating if selection is valid.
 
         """
-        return selected_params and selected_params[0]
+        return bool(selected_params and selected_params[0])
 
     def _disable_period_widget(self):
         """Disable period widget when no parameter is selected."""
@@ -1819,6 +1843,7 @@ class EnsembleUI:
                 step=self.auto_plot_step,
                 unit_value=self.auto_plot_unit,
                 palette_value=self.auto_plot_palette,
+                precip_accumulation=self.auto_plot_precip_accumulation,
             )
 
     def _refresh_point_based_plot(self):
@@ -1941,15 +1966,28 @@ class EnsembleUI:
             return []
 
     def _get_current_model_class(self):
-        """Get currently selected model class.
+        """Get currently selected model class (first selected).
 
         Returns:
             String representing model class (defaults to 'ifs').
 
         """
-        if "model_class" in self.widgets and self.widgets["model_class"].value:
-            return self.widgets["model_class"].value
-        return "ifs"
+        selected = self._get_selected_models()
+        return selected[0] if selected else "ifs"
+
+    def _get_selected_models(self):
+        """Get list of all selected model classes from checkboxes.
+
+        Returns:
+            List of selected model class strings (e.g., ['ifs', 'aifs']).
+
+        """
+        selected = []
+        checkboxes = self.widgets.get("model_checkboxes", {})
+        for model_name, cb in checkboxes.items():
+            if cb.value:
+                selected.append(model_name)
+        return selected or ["ifs"]
 
     def _generate_steps_for_model(self, model_class, start, end):
         """Generate step values based on model configuration.

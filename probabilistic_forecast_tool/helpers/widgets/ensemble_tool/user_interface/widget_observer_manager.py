@@ -54,12 +54,26 @@ class WidgetObserverManager:
         scenarios, action buttons, and coordinate inputs.
         """
         self._setup_data_source_observer()
+        self._setup_model_class_observer()
         self._setup_parameter_observer()
         self._setup_step_selection_observers()
         self._setup_observation_observers()
         self._setup_scenario_observers()
         self._setup_action_button_observers()
         self._setup_manual_coordinate_observer()
+
+    def _setup_model_class_observer(self):
+        """Set up observers for model checkboxes to show/hide custom experiment fields."""
+
+        def on_custom_checkbox_change(change):
+            is_custom = change["new"]
+            if "custom_experiment_box" in self.widgets:
+                self.widgets["custom_experiment_box"].layout.display = (
+                    "block" if is_custom else "none"
+                )
+
+        if "model_cb_custom" in self.widgets:
+            self.widgets["model_cb_custom"].observe(on_custom_checkbox_change, names="value")
 
     def _setup_data_source_observer(self):
         """Set up observer for data source selection changes.
@@ -111,15 +125,18 @@ class WidgetObserverManager:
         self.widgets["select_all_steps"].on_click(self._on_select_all_steps)
         self.widgets["deselect_all_steps"].on_click(self._on_deselect_all_steps)
         self.widgets["steps"].observe(self._on_steps_change, names="value")
+        self.widgets["step_frequency"].observe(self._on_step_frequency_change, names="value")
 
     def _on_select_all_steps(self, *_args):
         """Handle select all steps button click.
 
-        Selects all available step values in the steps display widget.
+        Selects step values matching the current frequency filter from the
+        steps display widget.
         """
         if self.widgets["steps_display"].options:
             all_values = [option[1] for option in self.widgets["steps_display"].options]
-            self.widgets["steps_display"].value = all_values
+            filtered = self._apply_frequency_filter(all_values)
+            self.widgets["steps_display"].value = filtered
 
     def _on_deselect_all_steps(self, *_args):
         """Handle deselect all steps button click.
@@ -145,6 +162,19 @@ class WidgetObserverManager:
         else:
             self._hide_step_selection_widgets()
 
+    def _on_step_frequency_change(self, change):  # noqa: ARG002
+        """Handle changes to step frequency dropdown.
+
+        Re-processes the current step range with the newly selected frequency.
+
+        Args:
+            change: Change dictionary (unused; frequency is read from widget).
+
+        """
+        steps_input = self.widgets["steps"].value
+        if self.ui._is_step_range(steps_input):
+            self._process_step_range(steps_input)
+
     def _process_step_range(self, steps_input):
         """Process step range input and update display.
 
@@ -159,16 +189,38 @@ class WidgetObserverManager:
         else:
             self._hide_step_selection_widgets()
 
+    def _apply_frequency_filter(self, steps):
+        """Filter steps to only those matching the selected frequency.
+
+        Keeps steps that are multiples of the chosen frequency. If a step
+        is not a multiple (e.g., the model has lower resolution than requested
+        in that period), it is silently skipped.
+
+        Args:
+            steps: List of all available step values.
+
+        Returns:
+            Filtered list of step values matching the selected frequency.
+
+        """
+        frequency = self.widgets["step_frequency"].value
+        if frequency <= 1:
+            return steps
+        return [s for s in steps if s % frequency == 0]
+
     def _show_step_selection(self, available_steps):
         """Show step selection widgets with available steps.
+
+        Automatically pre-selects steps that match the chosen frequency.
 
         Args:
             available_steps: List of available step values.
 
         """
-        step_options = [(f"Step {step}h", step) for step in available_steps]
+        filtered_steps = self._apply_frequency_filter(available_steps)
+        step_options = [(f"Step {step}h", step) for step in filtered_steps]
         self.widgets["steps_display"].options = step_options
-        self.widgets["steps_display"].value = available_steps
+        self.widgets["steps_display"].value = filtered_steps
         self.widgets["steps_display"].layout.display = "block"
         self.widgets["step_buttons"].layout.display = "block"
 
@@ -176,20 +228,6 @@ class WidgetObserverManager:
         """Hide step selection display and buttons."""
         self.widgets["steps_display"].layout.display = "none"
         self.widgets["step_buttons"].layout.display = "none"
-
-    def _setup_observation_observers(self):
-        """Set up observers for observation widgets.
-
-        Configures observers for observation enable toggle and data source
-        selection (browse vs retrieve). Manages visibility and enabled state
-        of observation-related widgets.
-        """
-        self.widgets["has_observations"].observe(
-            self._on_has_observations_change, names="value"
-        )
-        self.widgets["obs_data_source"].observe(
-            self._on_obs_source_change, names="value"
-        )
 
     def _on_has_observations_change(self, change):
         """Handle observation enable/disable toggle.
@@ -439,6 +477,7 @@ class WidgetObserverManager:
         """
         self.widgets["validate_btn"].on_click(self._on_validate_click)
         self.widgets["retrieve_btn"].on_click(self._on_retrieve_click)
+        self.widgets["save_btn"].on_click(self._on_save_click)
 
     def _on_validate_click(self, *_args):
         """Handle validate button click.
@@ -457,6 +496,11 @@ class WidgetObserverManager:
         if self.callbacks and hasattr(self.callbacks, "on_retrieve_click"):
             config = self.ui.get_current_configuration()
             self.callbacks.on_retrieve_click(config)
+
+    def _on_save_click(self, *_args):
+        """Handle save to file button click."""
+        if self.callbacks and hasattr(self.callbacks, "on_save_click"):
+            self.callbacks.on_save_click()
 
     def _setup_manual_coordinate_observer(self):
         """Set up observer for manual coordinate input.
@@ -831,6 +875,9 @@ class WidgetObserverManager:
         self._setup_plot_palette_observer(
             selectors["palette_selector"], refresh_plot_func
         )
+        self._setup_plot_precip_accumulation_observer(
+            selectors, get_available_steps_func, refresh_plot_func
+        )
         self._setup_plot_action_observers(
             selectors["clear_btn"], selectors["refresh_btn"], refresh_plot_func
         )
@@ -859,9 +906,11 @@ class WidgetObserverManager:
             "parameter_selector": widgets_dict["parameter_selector"],
             "unit_selector": widgets_dict["unit_selector"],
             "step_selector": widgets_dict["step_selector"],
+            "precip_accumulation_selector": widgets_dict.get("precip_accumulation_selector"),
             "palette_selector": widgets_dict["palette_selector"],
             "unit_container": widgets_dict["unit_container"],
             "step_container": widgets_dict["step_container"],
+            "precip_accumulation_container": widgets_dict.get("precip_accumulation_container"),
             "palette_container": widgets_dict["palette_container"],
             "clear_btn": widgets_dict["clear_btn"],
             "refresh_btn": widgets_dict["refresh_btn"],
@@ -982,6 +1031,7 @@ class WidgetObserverManager:
         self._update_unit_visibility(parameter, category, selectors, get_unit_func)
         self._update_step_visibility(parameter, selectors, get_steps_func)
         self._update_palette_visibility(parameter, category, selectors)
+        self._update_precip_accumulation_visibility(parameter, selectors)
 
     def _update_unit_visibility(self, parameter, category, selectors, get_unit_func):
         """Update unit selector visibility and options.
@@ -1000,6 +1050,21 @@ class WidgetObserverManager:
             self._configure_unit_selector(
                 parameter, category, selectors["unit_selector"], get_unit_func
             )
+        else:
+            # Even when the unit selector is hidden, reset auto_plot_unit so a
+            # stale unit from a previous parameter (e.g. "ms" from a wind
+            # parameter) does not bleed into the new parameter's transformation.
+            _hidden_unit_defaults = {
+                "pressure": "hpa",
+                "geopotential": "m",
+                "wind": "m/s",
+                "wind_speed": "m/s",
+                "wind_component": "m/s",
+                "wind_gust": "m/s",
+                "cape": "J/kg",
+                "snowfall": "m",
+            }
+            self.ui.auto_plot_unit = _hidden_unit_defaults.get(category, None)
 
     def _should_show_unit_selector(self, parameter, category):
         """Determine if unit selector should be shown.
@@ -1087,10 +1152,12 @@ class WidgetObserverManager:
 
         """
         available_steps = get_steps_func(parameter)
+        available_steps = self._apply_frequency_filter(available_steps)
 
         if parameter in ["tp", "lsp", "cp"]:
+            precip_accum = getattr(self.ui, "auto_plot_precip_accumulation", 24)
             step_options, default_step = self._get_precipitation_step_options(
-                available_steps
+                available_steps, precip_accum
             )
         else:
             step_options, default_step = self._get_standard_step_options(
@@ -1102,22 +1169,28 @@ class WidgetObserverManager:
             step_selector.value = default_step
             self.ui.auto_plot_step = default_step
 
-    def _get_precipitation_step_options(self, available_steps):
+    def _get_precipitation_step_options(self, available_steps, precip_accumulation=24):
         """Get step options for precipitation parameters.
+
+        Only steps where the start step (step - precip_accumulation) is also
+        available in the data are offered, ensuring the accumulation can be
+        computed from cumulative TP fields.
 
         Args:
             available_steps: List of available step values.
+            precip_accumulation: Accumulation window in hours.
 
         Returns:
             Tuple of (step_options, default_step).
 
         """
-        step_options = [(f"T+{step}h", step) for step in available_steps if step >= 6]
-        default_step = (
-            6
-            if 6 in available_steps
-            else (available_steps[0] if available_steps else 6)
-        )
+        steps_set = set(available_steps)
+        valid_steps = [
+            s for s in available_steps
+            if s >= precip_accumulation and (s - precip_accumulation) in steps_set
+        ]
+        step_options = [(f"T+{step}h", step) for step in valid_steps]
+        default_step = valid_steps[0] if valid_steps else (available_steps[0] if available_steps else precip_accumulation)
         return step_options, default_step
 
     def _get_standard_step_options(self, available_steps):
@@ -1133,6 +1206,48 @@ class WidgetObserverManager:
         step_options = [(f"T+{step}h", step) for step in available_steps]
         default_step = available_steps[0] if available_steps else 0
         return step_options, default_step
+
+    def _update_precip_accumulation_visibility(self, parameter, selectors):
+        """Show the precipitation accumulation widget only for precip params in stamps.
+
+        Args:
+            parameter: Selected parameter code.
+            selectors: Dictionary of widget references.
+
+        """
+        container = selectors.get("precip_accumulation_container")
+        if container is None:
+            return
+        is_precip = parameter in ["tp", "lsp", "cp"]
+        is_stamps = self.ui.current_plot_type == "stamps"
+        container.layout.display = "block" if (is_precip and is_stamps) else "none"
+
+    def _setup_plot_precip_accumulation_observer(
+        self, selectors, get_steps_func, refresh_func
+    ):
+        """Set up observer for precipitation accumulation dropdown changes.
+
+        Args:
+            selectors: Dictionary of widget references.
+            get_steps_func: Function to get available steps for a parameter.
+            refresh_func: Function to refresh plot.
+
+        """
+        selector = selectors.get("precip_accumulation_selector")
+        if selector is None:
+            return
+
+        def on_accum_change(change):
+            if change["new"]:
+                self.ui.auto_plot_precip_accumulation = change["new"]
+                param = selectors["parameter_selector"].value
+                if param in ["tp", "lsp", "cp"]:
+                    self._configure_step_selector(
+                        param, selectors["step_selector"], get_steps_func
+                    )
+                refresh_func()
+
+        selector.observe(on_accum_change, names="value")
 
     def _update_palette_visibility(self, parameter, category, selectors):
         """Update palette selector visibility.

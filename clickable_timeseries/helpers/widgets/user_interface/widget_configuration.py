@@ -53,11 +53,10 @@ class WidgetConfiguration:
 
         # Get models from config
         model_options = self.config_manager.get_models_for_ui()
-        default_model = self.config_manager.get_default_model()
 
         self.widgets["model"] = widgets.SelectMultiple(
             options=model_options,
-            value=[default_model],
+            value=[key for _, key in model_options],
             description="Models:",
             layout=widgets.Layout(width="300px", height="80px"),
         )
@@ -97,6 +96,20 @@ class WidgetConfiguration:
             value="",
             description="Grid Resolution (°):",
             layout=widgets.Layout(width="200px"),
+        )
+
+        self.widgets["rd_class"] = widgets.Text(
+            value="rd",
+            description="Class:",
+            placeholder="e.g. rd, od, ai",
+            layout=widgets.Layout(width="200px", display="none"),
+        )
+
+        self.widgets["rd_expver"] = widgets.Text(
+            value="",
+            description="Exp. version:",
+            placeholder="e.g. iekm",
+            layout=widgets.Layout(width="260px", display="none"),
         )
 
     def _create_local_file_widgets(self):
@@ -229,9 +242,9 @@ class WidgetConfiguration:
             disabled=True,
         )
 
-        self.widgets["stvl_path"] = widgets.Text(
-            value="/home/moz/bin/stvl_getgeo",
-            description="STVL executable path:",
+        self.widgets["vino_path"] = widgets.Text(
+            value="/home/moz/bin/vino_getgeo",
+            description="VINO executable path:",
             layout=widgets.Layout(width="400px"),
             disabled=True,
         )
@@ -269,6 +282,44 @@ class WidgetConfiguration:
             icon="download",
             layout=widgets.Layout(width="150px"),
             disabled=True,
+        )
+
+        # --- Lead-time explorer (hidden until observations are loaded) ---
+        self.widgets["obs_time_prev_btn"] = widgets.Button(
+            description="◀ Prev",
+            layout=widgets.Layout(width="75px"),
+            disabled=True,
+        )
+        self.widgets["obs_time_next_btn"] = widgets.Button(
+            description="Next ▶",
+            layout=widgets.Layout(width="75px"),
+            disabled=True,
+        )
+        self.widgets["obs_time_label"] = widgets.HTML(
+            value="<span style='font-size:0.85em;color:#555;'>–</span>",
+            layout=widgets.Layout(min_width="160px", max_width="300px"),
+        )
+        self.widgets["obs_time_explorer"] = widgets.VBox(
+            [
+                widgets.HTML(
+                    "<p style='margin:6px 0 2px;font-size:0.85em;color:#444;'>"
+                    "<b>Explore observation lead times:</b></p>"
+                ),
+                widgets.HBox(
+                    [
+                        self.widgets["obs_time_prev_btn"],
+                        self.widgets["obs_time_label"],
+                        self.widgets["obs_time_next_btn"],
+                    ],
+                    layout=widgets.Layout(align_items="center", margin="2px 0"),
+                ),
+            ],
+            layout=widgets.Layout(display="none", margin="6px 0 0 0"),
+        )
+        # Colorbar legend (an HTML widget updated dynamically)
+        self.widgets["obs_colorbar"] = widgets.HTML(
+            value="",
+            layout=widgets.Layout(display="none", margin="4px 0 0 0"),
         )
 
     def _create_bbox_widgets(self):

@@ -96,16 +96,16 @@ class EnsembleCallbacks:
             self.use_cases = {}
 
     def _init_observations_retriever(self):
-        """Initialize observations retriever with proper STVL path."""
+        """Initialize observations retriever with proper VINO path."""
         try:
             if Path(self.config_file).exists():
                 with open(self.config_file) as f:
                     config_data = json.load(f)
-                stvl_path = config_data.get("stvl_path", "/home/moz/bin/stvl_getgeo")
+                vino_path = config_data.get("vino_path", config_data.get("stvl_path", "/home/moz/bin/vino_getgeo"))
             else:
-                stvl_path = "/home/moz/bin/stvl_getgeo"
+                vino_path = "/home/moz/bin/vino_getgeo"
 
-            self.observations_retriever = ObservationsRetriever(stvl_path)
+            self.observations_retriever = ObservationsRetriever(vino_path)
 
         except Exception:
             self.observations_retriever = None
@@ -299,9 +299,7 @@ class EnsembleCallbacks:
             if not self.plotting_manager.current_parameter:
                 return
 
-            if self.plotting_manager.selected_points:
-                point_coords = list(self.plotting_manager.selected_points.values())[0]
-                lat, lon = point_coords
+            if not self.plotting_manager.selected_points:
                 return
 
             parameter = self.plotting_manager.current_parameter
@@ -447,8 +445,6 @@ class EnsembleCallbacks:
                     self.current_config = config
                     self._on_data_retrieval_complete(config)
                     return
-                else:
-                    print("NOT REUSING - will retrieve new data")
 
             self.current_config = config
 
@@ -468,6 +464,119 @@ class EnsembleCallbacks:
             if self.ui:
                 self.ui.show_alert_message(
                     f"Error retrieving data: {e}",
+                    "error",
+                    section="data",
+                    permanent=True,
+                )
+
+    def on_save_click(self):
+        """Handle save to file button click.
+
+        Saves the currently loaded MARS data to GRIB files under $SCRATCH/evalkit/<plot_type>/.
+        """
+        import datetime
+
+        try:
+            if not self.current_data:
+                if self.ui:
+                    self.ui.show_alert_message(
+                        "No data loaded. Please retrieve data first.",
+                        "error",
+                        section="data",
+                        permanent=True,
+                    )
+                return
+
+            plot_type = self.current_config.get("plot_type")
+            if not plot_type:
+                if self.ui:
+                    self.ui.show_alert_message(
+                        "Cannot determine plot type. Please retrieve data again.",
+                        "error",
+                        section="data",
+                        permanent=True,
+                    )
+                return
+
+            # Determine output directory based on plot type
+            scratch = os.environ.get("SCRATCH", str(Path.home()))
+            subdir = "meteogram" if plot_type in ("meteogram", "plumes") else plot_type
+            output_dir = Path(scratch) / "evalkit" / subdir
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            # Build a timestamp prefix for filenames
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            forecast_date = (
+                self.current_config.get("parameters", {}).get("forecast_date", "")
+                or self.current_config.get("parameters", {}).get("analysis_date", "")
+            )
+            date_str = str(forecast_date).replace("-", "") if forecast_date else ts
+
+            saved_files = []
+
+            if plot_type in ("meteogram", "plumes"):
+                # data keys: "pf", "cf"
+                for key in ("pf", "cf"):
+                    if key in self.current_data and isinstance(self.current_data[key], dict):
+                        ds = self.current_data[key].get("dataset")
+                        if ds is not None:
+                            fname = output_dir / f"{date_str}_{key}.grib"
+                            ds.save(str(fname))
+                            saved_files.append(str(fname))
+
+            elif plot_type == "stamps":
+                # data keys: "fc", "cf", "pf"
+                for key in ("fc", "cf", "pf"):
+                    if key in self.current_data and isinstance(self.current_data[key], dict):
+                        ds = self.current_data[key].get("dataset")
+                        if ds is not None:
+                            fname = output_dir / f"{date_str}_{key}.grib"
+                            ds.save(str(fname))
+                            saved_files.append(str(fname))
+
+            elif plot_type == "cdf":
+                # data keys: "cd" and "forecast_data.scenarios"
+                if "cd" in self.current_data and isinstance(self.current_data["cd"], dict):
+                    ds = self.current_data["cd"].get("dataset")
+                    if ds is not None:
+                        fname = output_dir / f"{date_str}_cd.grib"
+                        ds.save(str(fname))
+                        saved_files.append(str(fname))
+
+                forecast_data = self.current_data.get("forecast_data", {})
+                scenarios = forecast_data.get("scenarios", {})
+                for scenario_key, scenario_data in scenarios.items():
+                    if isinstance(scenario_data, dict):
+                        ds = scenario_data.get("dataset")
+                        if ds is not None:
+                            safe_key = scenario_key.replace("/", "_").replace(" ", "_")
+                            fname = output_dir / f"{date_str}_{safe_key}.grib"
+                            ds.save(str(fname))
+                            saved_files.append(str(fname))
+
+            if saved_files:
+                files_list = "<br>".join(saved_files)
+                if self.ui:
+                    self.ui.show_alert_message(
+                        f"Saved {len(saved_files)} file(s) to {output_dir}:<br>{files_list}",
+                        "success",
+                        section="data",
+                        permanent=True,
+                    )
+            else:
+                if self.ui:
+                    self.ui.show_alert_message(
+                        "No data fields found to save.",
+                        "error",
+                        section="data",
+                        permanent=True,
+                    )
+
+        except Exception as e:
+            traceback.print_exc()
+            if self.ui:
+                self.ui.show_alert_message(
+                    f"Error saving data: {e}",
                     "error",
                     section="data",
                     permanent=True,
@@ -509,6 +618,11 @@ class EnsembleCallbacks:
                 ):
                     self.map_handler.set_data_loaded_status(True)
 
+                # Enable the Save to File button now that data is available
+                if self.ui and "save_btn" in self.ui.widgets:
+                    self.ui.widgets["save_btn"].disabled = False
+                    self.ui.widgets["save_btn"].style.button_color = "#78909C"
+
                 if self.ui:
                     self.ui.show_alert_message(
                         "Data retrieval completed successfully! Single-point auto-plotting ready.",
@@ -539,9 +653,6 @@ class EnsembleCallbacks:
                             )
                     else:
                         self._auto_create_stamps_plot()
-
-            else:
-                print("No current_data available after retrieval")
 
         except Exception as e:
             traceback.print_exc()
@@ -611,7 +722,6 @@ class EnsembleCallbacks:
 
                 return True
             else:
-                print("UI doesn't have _create_simplified_plot_interface method")
                 return False
 
         except Exception as e:
@@ -743,12 +853,23 @@ class EnsembleCallbacks:
 
         except Exception as e:
             if self.ui:
-                self.ui.show_alert_message(
-                    f"Error selecting {scenario_key} file: {e}",
-                    "error",
-                    section="data",
-                    permanent=True,
-                )
+                err = str(e)
+                if "DISPLAY" in err or "display" in err or "Tcl" in err:
+                    self.ui.show_alert_message(
+                        f"File browser unavailable (no graphical display in this environment). "
+                        f"Please type the full path to your {scenario_key} file directly into "
+                        f"the text box next to the '{scenario_key}' row and press Enter.",
+                        "warning",
+                        section="data",
+                        permanent=True,
+                    )
+                else:
+                    self.ui.show_alert_message(
+                        f"Error selecting {scenario_key} file: {e}",
+                        "error",
+                        section="data",
+                        permanent=True,
+                    )
 
     def _update_scenario_file_display_by_id(self, widget_id, file_path):
         """Update scenario file display using widget ID.
@@ -864,7 +985,7 @@ class EnsembleCallbacks:
         """
         self.observation_handler._process_selected_observation_folder(folder_path)
 
-    def create_stamps_plot(self, parameter, step, unit_value, palette_value):
+    def create_stamps_plot(self, parameter, step, unit_value, palette_value, precip_accumulation=None):
         """Create stamps plot.
 
         Args:
@@ -872,13 +993,17 @@ class EnsembleCallbacks:
             step: Forecast step
             unit_value: Unit value
             palette_value: Palette value
+            precip_accumulation: Optional accumulation window in hours for
+                precipitation parameters (tp/lsp/cp). If None, raw field
+                values are plotted.
 
         Returns:
             bool: True if successful
 
         """
         return self.plotting_callbacks.create_stamps_plot(
-            parameter, step, unit_value, palette_value
+            parameter, step, unit_value, palette_value,
+            precip_accumulation=precip_accumulation,
         )
 
     def create_cdf_plot(self, parameter, unit_value):

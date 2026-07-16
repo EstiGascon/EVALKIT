@@ -331,7 +331,21 @@ class MarsArchiveDataRetriever:
                 request_params["grid"] = grid
 
             try:
-                ds = ek.from_source(self.source, **request_params)
+                # MARS uses SQLite internally. $TMPDIR and $SCRATCH are on Lustre,
+                # which does not support SQLite POSIX file locking. Use /tmp (local
+                # tmpfs) to avoid "unable to open database file" errors.
+                import os as _os
+                _orig_tmpdir = _os.environ.get("TMPDIR")
+                _mars_tmp = f"/tmp/mars_tmp_{_os.environ.get('USER', 'evalkit')}"
+                _os.makedirs(_mars_tmp, exist_ok=True)
+                _os.environ["TMPDIR"] = _mars_tmp
+                try:
+                    ds = ek.from_source(self.source, **request_params)
+                finally:
+                    if _orig_tmpdir is None:
+                        _os.environ.pop("TMPDIR", None)
+                    else:
+                        _os.environ["TMPDIR"] = _orig_tmpdir
                 all_datasets.append(ds)
 
                 all_metadata.append(
@@ -464,7 +478,21 @@ class MarsArchiveDataRetriever:
             print(f"   Steps: {len(steps)}")
             print(f"   Expected fields: {len(param_ids) * len(steps)}")
 
-            ds = ek.from_source(self.source, **request_params)
+            # MARS uses SQLite internally. $TMPDIR and $SCRATCH are on Lustre,
+            # which does not support SQLite POSIX file locking. Use /tmp (local
+            # tmpfs) to avoid "unable to open database file" errors.
+            import os as _os
+            _orig_tmpdir = _os.environ.get("TMPDIR")
+            _mars_tmp = f"/tmp/mars_tmp_{_os.environ.get('USER', 'evalkit')}"
+            _os.makedirs(_mars_tmp, exist_ok=True)
+            _os.environ["TMPDIR"] = _mars_tmp
+            try:
+                ds = ek.from_source(self.source, **request_params)
+            finally:
+                if _orig_tmpdir is None:
+                    _os.environ.pop("TMPDIR", None)
+                else:
+                    _os.environ["TMPDIR"] = _orig_tmpdir
 
             metadata = {
                 "param": param,

@@ -56,6 +56,15 @@ class MeteogramPlotting:
             Array of datetime objects
 
         """
+        # Prefer valid_time coordinate when available — earthkit provides it
+        # as datetime64 and it avoids the timedelta->datetime conversion entirely.
+        for coord_name in ("valid_time", "valid_datetime"):
+            if coord_name in data_array.coords:
+                vt = data_array.coords[coord_name]
+                if np.issubdtype(vt.dtype, np.datetime64):
+                    return pd.DatetimeIndex(vt.values)
+
+        # Fall back to computing absolute times from step + base time.
         steps = data_array.coords["step"].values
 
         date_str = metadata["date"]
@@ -65,7 +74,8 @@ class MeteogramPlotting:
             reference_time = pd.to_datetime(date_str, format="%Y%m%d")
 
         if "time" in metadata:
-            hours = int(metadata["time"].split(":")[0])
+            time_val = metadata["time"]
+            hours = int(str(time_val).split(":")[0]) if ":" in str(time_val) else int(time_val)
             reference_time = reference_time + pd.Timedelta(hours=hours)
 
         step_deltas = pd.to_timedelta(steps)
@@ -159,6 +169,11 @@ class MeteogramPlotting:
 
         return point_data
 
+    @staticmethod
+    def _is_precipitation_param(parameter: str) -> bool:
+        """Return True for accumulated precipitation parameters."""
+        return parameter in {"tp", "lsp", "cp", "sf"}
+
     def _preprocess_data(self, data_source, parameter: str):
         """Extract parameter as DataArray from data source.
 
@@ -175,9 +190,35 @@ class MeteogramPlotting:
             Extracted parameter data
 
         """
+        # ws is a derived parameter (sqrt(10u² + 10v²)) — it has no GRIB shortName.
+        if parameter == "ws":
+            return self._compute_wind_speed(data_source)
+
         if hasattr(data_source, "sel"):
+            # Try param= first (earthkit maps this to shortName), fallback to shortName=
             selected_data = data_source.sel(param=parameter)
-            xr_data = selected_data.to_xarray()
+            if len(selected_data) == 0:
+                selected_data = data_source.sel(shortName=parameter)
+
+            if len(selected_data) > 0:
+                try:
+                    xr_data = selected_data.to_xarray()
+                except NotImplementedError:
+                    # earthkit >=0.17: sel() on some FieldList types returns a
+                    # MaskFieldList whose to_xarray() is abstract. Materialize first.
+                    from earthkit.data import FieldList as _EkFL
+                    xr_data = _EkFL.from_fields(list(selected_data)).to_xarray()
+                except Exception:
+                    try:
+                        from earthkit.data import FieldList as _EkFL
+                        xr_data = _EkFL.from_fields(list(selected_data)).to_xarray()
+                    except Exception:
+                        xr_data = None
+            else:
+                xr_data = None
+
+            if xr_data is None or (isinstance(xr_data, xr.Dataset) and not xr_data.data_vars):
+                raise ValueError(f"Parameter '{parameter}' not found in dataset.")
         else:
             xr_data = (
                 data_source
@@ -186,9 +227,63 @@ class MeteogramPlotting:
             )
 
         if isinstance(xr_data, xr.Dataset):
+            if not xr_data.data_vars:
+                raise ValueError(f"Parameter '{parameter}' not found in dataset.")
+            if parameter in xr_data.data_vars:
+                return xr_data[parameter]
             return xr_data[list(xr_data.data_vars)[0]]
 
         return xr_data
+
+    def _compute_wind_speed(self, data_source) -> xr.DataArray:
+        """Compute 10m wind speed from U and V components.
+
+        Parameters
+        ----------
+        data_source : earthkit or xarray object
+            Dataset containing 10u and 10v fields
+
+        Returns
+        -------
+        xr.DataArray
+            Wind speed DataArray
+
+        """
+        if hasattr(data_source, "sel"):
+            def _sel_to_xarray(ds, param):
+                sel = ds.sel(param=param)
+                if len(sel) == 0:
+                    sel = ds.sel(shortName=param)
+                try:
+                    return sel.to_xarray()
+                except NotImplementedError:
+                    from earthkit.data import FieldList as _EkFL
+                    return _EkFL.from_fields(list(sel)).to_xarray()
+            u_xr = _sel_to_xarray(data_source, "10u")
+            v_xr = _sel_to_xarray(data_source, "10v")
+        else:
+            xr_full = (
+                data_source
+                if isinstance(data_source, xr.Dataset)
+                else data_source.to_xarray()
+            )
+            # earthkit converts shortName to a data variable named after it
+            u_xr = xr_full[["10u"]] if "10u" in xr_full else xr_full
+            v_xr = xr_full[["10v"]] if "10v" in xr_full else xr_full
+
+        if isinstance(u_xr, xr.Dataset):
+            u_da = u_xr[list(u_xr.data_vars)[0]]
+        else:
+            u_da = u_xr
+
+        if isinstance(v_xr, xr.Dataset):
+            v_da = v_xr[list(v_xr.data_vars)[0]]
+        else:
+            v_da = v_xr
+
+        ws = np.sqrt(u_da**2 + v_da**2)
+        ws.name = "ws"
+        return ws
 
     def _load_and_select_data(self, data_source, parameter: str) -> xr.DataArray:
         """Load and extract parameter from data source.
@@ -211,6 +306,176 @@ class MeteogramPlotting:
             else data_source
         )
         return self._preprocess_data(dataset, parameter)
+
+    def _extract_parameter_at_point(
+        self, data_source, parameter: str, lat: float, lon: float
+    ) -> xr.DataArray:
+        """Extract parameter time series at nearest gridpoint from earthkit data.
+
+        For large datasets on reduced Gaussian grids, avoids creating massive
+        intermediate xarray datasets by extracting gridpoint values directly
+        from the earthkit FieldList.
+
+        Parameters
+        ----------
+        data_source : earthkit FieldList or xarray object
+            Input data
+        parameter : str
+            Parameter short name (e.g. '2t', 'tp')
+        lat : float
+            Target latitude
+        lon : float
+            Target longitude
+
+        Returns
+        -------
+        xr.DataArray
+            Time series at the nearest gridpoint with 'step' (and optionally
+            'number') dimensions.
+
+        """
+        if parameter == "ws":
+            u_point = self._extract_parameter_at_point(data_source, "10u", lat, lon)
+            v_point = self._extract_parameter_at_point(data_source, "10v", lat, lon)
+            ws = np.sqrt(u_point**2 + v_point**2)
+            ws.name = "ws"
+            return ws
+
+        # Non-earthkit data: fall back to full xarray path
+        if not hasattr(data_source, "sel") or isinstance(
+            data_source, xr.Dataset | xr.DataArray
+        ):
+            xr_data = self._preprocess_data(data_source, parameter)
+            return self._extract_nearest_gridpoint(xr_data, lat, lon)
+
+        # Select parameter from FieldList
+        selected = data_source.sel(param=parameter)
+        if len(selected) == 0:
+            selected = data_source.sel(shortName=parameter)
+        if len(selected) == 0:
+            # Manual fallback: iterate fields and match by shortName metadata
+            manual_fields = []
+            for f in data_source:
+                try:
+                    sn = f.metadata("shortName")
+                    if sn == parameter:
+                        manual_fields.append(f)
+                except Exception:
+                    pass
+            if manual_fields:
+                from earthkit.data import FieldList as _EkFL
+                selected = _EkFL.from_fields(manual_fields)
+        if len(selected) == 0:
+            # Collect diagnostic info for debugging
+            ds_type = type(data_source).__name__
+            n_fields = len(data_source)
+            found_params = set()
+            for f in data_source:
+                try:
+                    found_params.add(f.metadata("shortName"))
+                except Exception:
+                    found_params.add("<unknown>")
+            raise ValueError(
+                f"Parameter '{parameter}' not found in dataset. "
+                f"Dataset type: {ds_type}, fields: {n_fields}, "
+                f"available params: {sorted(found_params)}"
+            )
+
+        # Find nearest gridpoint index from the first field.
+        # Some fields produced by post-processing (e.g. 6-hourly precipitation
+        # built via FieldList.from_array) may have inconsistent grid metadata
+        # that triggers "Grid description is wrong or inconsistent" in ecCodes
+        # when to_latlon() or .values is called.  Scan through fields to find
+        # one that works, and fall back to the xarray slow path if none do.
+        latlon = None
+        first_field = None
+        for candidate in selected:
+            try:
+                latlon = candidate.to_latlon()
+                # sanity check .values access too
+                _ = candidate.values
+                first_field = candidate
+                break
+            except Exception as _ll_err:
+                continue
+
+        if latlon is None or first_field is None:
+            print(
+                f"[WARN _extract_parameter_at_point] earthkit fast path failed "
+                f"for '{parameter}' (grid metadata issue). Falling back to xarray."
+            )
+            xr_data = self._preprocess_data(data_source, parameter)
+            return self._extract_nearest_gridpoint(xr_data, lat, lon)
+
+        idx, _ = nearest_point_haversine(
+            [lat, lon], (latlon["lat"], latlon["lon"])
+        )
+
+        # Collect (step, number) → value for every field; skip any that fail.
+        step_set = set()
+        number_set = set()
+        records = {}
+        skipped = 0
+        for field in selected:
+            try:
+                step = field.metadata("step")
+                md = field.metadata()
+                number = md.get("number", None)
+                val = float(field.values[idx])
+            except Exception:
+                skipped += 1
+                continue
+            step_set.add(step)
+            if number is not None:
+                number_set.add(number)
+            records[(step, number)] = val
+
+        if skipped:
+            print(
+                f"[WARN _extract_parameter_at_point] Skipped {skipped} fields "
+                f"with bad grid metadata for '{parameter}'."
+            )
+
+        if not records:
+            print(
+                f"[WARN _extract_parameter_at_point] No usable fields for "
+                f"'{parameter}' via fast path. Falling back to xarray."
+            )
+            xr_data = self._preprocess_data(data_source, parameter)
+            return self._extract_nearest_gridpoint(xr_data, lat, lon)
+
+        unique_steps = sorted(step_set)
+        step_coord = np.array(
+            [np.timedelta64(int(s), "h") for s in unique_steps]
+        )
+
+        if number_set:
+            unique_numbers = sorted(number_set)
+            data = np.full((len(unique_numbers), len(unique_steps)), np.nan)
+            num_map = {n: i for i, n in enumerate(unique_numbers)}
+            step_map = {s: i for i, s in enumerate(unique_steps)}
+            for (step, number), val in records.items():
+                if number is not None:
+                    data[num_map[number], step_map[step]] = val
+            result = xr.DataArray(
+                data,
+                dims=["number", "step"],
+                coords={"number": unique_numbers, "step": step_coord},
+                name=parameter,
+            )
+        else:
+            data = np.full(len(unique_steps), np.nan)
+            step_map = {s: i for i, s in enumerate(unique_steps)}
+            for (step, _), val in records.items():
+                data[step_map[step]] = val
+            result = xr.DataArray(
+                data,
+                dims=["step"],
+                coords={"step": step_coord},
+                name=parameter,
+            )
+
+        return result
 
     def _find_nearest_station(
         self, meteogram_data: dict, lat: float, lon: float, tolerance: float = 0.1
@@ -280,8 +545,8 @@ class MeteogramPlotting:
 
         if category == "temperature" and target_unit.lower() == "celsius":
             return obs_values - 273.15
-        elif category == "precipitation" and target_unit.lower() == "mm":
-            return obs_values * 1000
+        # Observation precipitation values come from VINO already in mm;
+        # no unit conversion is needed regardless of target_unit.
 
         return obs_values
 
@@ -292,7 +557,7 @@ class MeteogramPlotting:
         target_unit: str,
         parameter: str,
         time_range: tuple = None,
-    ) -> xr.DataArray:
+    ) -> xr.DataArray | None:
         """Extract observation timeseries for a station.
 
         Parameters
@@ -348,6 +613,10 @@ class MeteogramPlotting:
             np.array(obs_values), parameter, target_unit
         )
 
+        # VINO observations are per-period amounts (e.g. 6-hourly totals) and
+        # forecast precipitation is already de-accumulated into matching periods
+        # by _calculate_6h_precipitation(), so no cumsum is needed here.
+
         return xr.DataArray(
             converted_values,
             coords={"t": obs_times},
@@ -356,7 +625,10 @@ class MeteogramPlotting:
         )
 
     def _get_forecast_time_range(self, meteogram_data: dict) -> tuple:
-        """Extract time range from forecast data.
+        """Extract time range from forecast metadata.
+
+        Computes the time range from metadata (date, time, steps) without
+        loading any field data, avoiding expensive to_xarray() conversions.
 
         Parameters
         ----------
@@ -369,14 +641,27 @@ class MeteogramPlotting:
             (start_time, end_time) or None
 
         """
-        for data_type in ["cf", "pf"]:
+        for data_type in ["cf", "pf", "fc"]:
             if data_type in meteogram_data:
-                dataset = meteogram_data[data_type]["dataset"]
-                data = self._load_and_select_data(dataset, "2t")
-                if data is not None:
-                    xr_data = data.to_xarray() if hasattr(data, "to_xarray") else data
-                    times = xr_data.coords["step"].values
-                    return (pd.to_datetime(times[0]), pd.to_datetime(times[-1]))
+                meta = meteogram_data[data_type].get("metadata", {})
+                if "date" in meta and "steps" in meta:
+                    date_str = meta["date"]
+                    if "-" in date_str:
+                        ref = pd.to_datetime(date_str, format="%Y-%m-%d")
+                    else:
+                        ref = pd.to_datetime(date_str, format="%Y%m%d")
+                    if "time" in meta:
+                        time_val = meta["time"]
+                        hours = (
+                            int(str(time_val).split(":")[0])
+                            if ":" in str(time_val)
+                            else int(time_val)
+                        )
+                        ref = ref + pd.Timedelta(hours=hours)
+                    steps = [int(s) for s in meta["steps"]]
+                    start = ref + pd.Timedelta(hours=min(steps))
+                    end = ref + pd.Timedelta(hours=max(steps))
+                    return (start, end)
 
         return None
 
@@ -388,6 +673,7 @@ class MeteogramPlotting:
         forecast_date: str = None,
         forecast_time: str = None,
         station_id: str = None,
+        model_class: str = "",
     ) -> str:
         """Generate formatted plot title.
 
@@ -440,10 +726,19 @@ class MeteogramPlotting:
         if station_id:
             location_str += f" (Station: {station_id})"
 
-        return (
-            f"Meteogram: {param_config['title']}\n"
-            f"Location: {location_str} | Forecast: {datetime_info}"
-        )
+        model_label = ""
+        if model_class:
+            model_names = {"ifs": "IFS-ENS", "aifs": "AIFS-ENS", "aifs-single": "AIFS-Single", "ifs-4km": "IFS 4.4km", "custom": "Custom"}
+            model_label = model_names.get(model_class, model_class.upper())
+
+        title_parts = []
+        if model_label:
+            title_parts.append(f"Meteogram ({model_label}): {param_config['title']}")
+        else:
+            title_parts.append(f"Meteogram: {param_config['title']}")
+        title_parts.append(f"Location: {location_str} | Forecast: {datetime_info}")
+
+        return "\n".join(title_parts)
 
     def _create_box_traces(
         self, data_array: xr.DataArray, metadata: dict, quantiles: list = None
@@ -469,7 +764,13 @@ class MeteogramPlotting:
             quantiles = [0.05, 0.25, 0.5, 0.75, 0.95]
 
         time_coords = self._get_absolute_times(data_array, metadata)
-        ensemble_dim = [d for d in data_array.dims if d != "step"][0]
+        non_step_dims = [d for d in data_array.dims if d != "step"]
+        if not non_step_dims:
+            raise ValueError(
+                f"No ensemble dimension found in data for box plot. "
+                f"Dims: {data_array.dims}."
+            )
+        ensemble_dim = non_step_dims[0]
 
         ensemble_axis = data_array.dims.index(ensemble_dim)
         quantile_values = np.quantile(data_array.values, quantiles, axis=ensemble_axis)
@@ -492,6 +793,7 @@ class MeteogramPlotting:
                 fillcolor=self.color_palette["pf_fill"],
                 name="Ensemble Members",
                 hoverinfo="skip",
+                alignmentgroup="ensemble",
             )
         )
 
@@ -512,6 +814,7 @@ class MeteogramPlotting:
                     name="Ensemble Members",
                     hoverinfo="skip",
                     showlegend=False,
+                    alignmentgroup="ensemble",
                 )
             )
 
@@ -540,6 +843,8 @@ class MeteogramPlotting:
         skip_observations: bool = False,
         width: int = 1200,
         height: int = 600,
+        model_class: str = "",
+        step_frequency: int = None,
     ) -> go.Figure:
         """Create interactive meteogram plot.
 
@@ -580,14 +885,29 @@ class MeteogramPlotting:
         if target_unit is None:
             target_unit = param_config.get("unit", "")
 
+        # Parameters for which observation overlay is meaningful and compatible.
+        # Excluded: 10u/10v (components, not scalar speed), msl, and other
+        # parameters for which no VINO observation counterpart exists.
+        _OBS_SUPPORTED_PARAMS = {"2t", "tp", "cp", "lsp", "ws"}
+
         if plot_types is None:
-            plot_types = ["box", "cf_line"]
-            if not skip_observations and "observations" in meteogram_data:
+            if "fc" in meteogram_data and "cf" not in meteogram_data and "pf" not in meteogram_data:
+                # AIFS-single: only a deterministic fc line
+                plot_types = ["fc_line"]
+            else:
+                plot_types = ["box", "cf_line"]
+                if "fc" in meteogram_data:
+                    plot_types.append("fc_line")
+            if (
+                not skip_observations
+                and "observations" in meteogram_data
+                and parameter in _OBS_SUPPORTED_PARAMS
+            ):
                 plot_types.append("obs_line")
 
         forecast_date = None
         forecast_time = None
-        for data_type in ["cf", "pf"]:
+        for data_type in ["cf", "pf", "fc"]:
             if data_type in meteogram_data:
                 metadata = meteogram_data[data_type].get("metadata", {})
                 forecast_date = forecast_date or metadata.get("date")
@@ -600,7 +920,8 @@ class MeteogramPlotting:
             nearest_station = self._find_nearest_station(meteogram_data, lat, lon)
 
         title = self._generate_plot_title(
-            parameter, lat, lon, forecast_date, forecast_time, nearest_station
+            parameter, lat, lon, forecast_date, forecast_time, nearest_station,
+            model_class=model_class,
         )
 
         time_range = None
@@ -609,50 +930,69 @@ class MeteogramPlotting:
 
         fig = go.Figure()
 
+        def _filter_by_step_freq(da, freq):
+            """Keep only steps whose hour value is divisible by *freq*."""
+            if freq is None or "step" not in da.dims:
+                return da
+            steps_h = da.coords["step"].values / np.timedelta64(1, "h")
+            mask = np.asarray(steps_h % freq == 0)
+            kept = da.isel(step=mask)
+            return kept
+
         if "cf" in meteogram_data and "cf_line" in plot_types:
             cf_dataset = meteogram_data["cf"]["dataset"]
             cf_metadata = meteogram_data["cf"]["metadata"]
-            cf_data = self._load_and_select_data(cf_dataset, parameter)
-            cf_xr = cf_data.to_xarray() if hasattr(cf_data, "to_xarray") else cf_data
-            cf_point = self._extract_nearest_gridpoint(cf_xr, lat, lon)
-
-            cf_values = np.squeeze(cf_point.values)
-            non_singleton_dims = [d for d in cf_point.dims if cf_point.sizes[d] > 1]
-            non_singleton_coords = {
-                d: cf_point.coords[d]
-                for d in non_singleton_dims
-                if d in cf_point.coords
-            }
-
-            cf_point = xr.DataArray(
-                cf_values,
-                dims=non_singleton_dims,
-                coords=non_singleton_coords,
-                name=parameter,
+            cf_point = self._extract_parameter_at_point(
+                cf_dataset, parameter, lat, lon
             )
 
+            # Drop any unexpected singleton non-step dimensions (e.g., stray
+            # number=0).  'step' is always preserved so _get_absolute_times
+            # can find it even when only a single step is present.
+            _stray_dims = [
+                d for d in cf_point.dims
+                if d != "step" and cf_point.sizes[d] == 1
+            ]
+            if _stray_dims:
+                cf_point = cf_point.squeeze(_stray_dims, drop=True)
+
+            cf_point = _filter_by_step_freq(cf_point, step_frequency)
+
             cf_point, _ = self.styling_config.transform_data_and_levels(
-                cf_point, parameter, [], target_unit
+                cf_point, parameter, [], target_unit,
+                model_class=model_class,
             )
 
             time_coords = self._get_absolute_times(cf_point, cf_metadata)
 
-            fig.add_trace(
-                go.Scatter(
-                    x=time_coords,
-                    y=cf_point.values,
-                    mode="lines",
-                    name="Control Forecast",
-                    line={"color": self.color_palette["cf"], "width": 3},
+            if self._is_precipitation_param(parameter):
+                # 6-hourly accumulation: render as bars centred on the valid time.
+                fig.add_trace(
+                    go.Bar(
+                        x=time_coords,
+                        y=cf_point.values,
+                        name="Control Forecast",
+                        marker_color=self.color_palette["cf"],
+                        opacity=0.7,
+                    )
                 )
-            )
+            else:
+                fig.add_trace(
+                    go.Scatter(
+                        x=time_coords,
+                        y=cf_point.values,
+                        mode="lines",
+                        name="Control Forecast",
+                        line={"color": self.color_palette["cf"], "width": 3},
+                    )
+                )
 
         if "pf" in meteogram_data and "box" in plot_types:
             pf_dataset = meteogram_data["pf"]["dataset"]
             pf_metadata = meteogram_data["pf"]["metadata"]
-            pf_data = self._load_and_select_data(pf_dataset, parameter)
-            pf_xr = pf_data.to_xarray() if hasattr(pf_data, "to_xarray") else pf_data
-            pf_point = self._extract_nearest_gridpoint(pf_xr, lat, lon)
+            pf_point = self._extract_parameter_at_point(
+                pf_dataset, parameter, lat, lon
+            )
 
             pf_values = np.squeeze(pf_point.values)
             non_singleton_dims = [d for d in pf_point.dims if pf_point.sizes[d] > 1]
@@ -669,13 +1009,73 @@ class MeteogramPlotting:
                 name=parameter,
             )
 
+            pf_point = _filter_by_step_freq(pf_point, step_frequency)
+
             pf_point, _ = self.styling_config.transform_data_and_levels(
-                pf_point, parameter, [], target_unit
+                pf_point, parameter, [], target_unit,
+                model_class=model_class,
             )
 
             box_traces = self._create_box_traces(pf_point, pf_metadata)
             for trace in box_traces:
                 fig.add_trace(trace)
+
+        if "fc" in meteogram_data and "fc_line" in plot_types:
+            fc_dataset = meteogram_data["fc"]["dataset"]
+            fc_metadata = meteogram_data["fc"]["metadata"]
+            fc_point = self._extract_parameter_at_point(
+                fc_dataset, parameter, lat, lon
+            )
+
+            # Drop any unexpected singleton non-step dimensions; preserve
+            # 'step' always so _get_absolute_times can find it even when only
+            # a single step is present.
+            _stray_dims = [
+                d for d in fc_point.dims
+                if d != "step" and fc_point.sizes[d] == 1
+            ]
+            if _stray_dims:
+                fc_point = fc_point.squeeze(_stray_dims, drop=True)
+
+            fc_point = _filter_by_step_freq(fc_point, step_frequency)
+
+            fc_point, _ = self.styling_config.transform_data_and_levels(
+                fc_point, parameter, [], target_unit,
+                model_class=model_class,
+            )
+
+            time_coords = self._get_absolute_times(fc_point, fc_metadata)
+
+            _fc_det_names = {
+                "aifs-single": "AIFS-Single Forecast",
+                "ifs-4km": "IFS 4.4km Forecast",
+            }
+            _fc_label = _fc_det_names.get(model_class, f"{model_class.upper()} Forecast")
+
+            if self._is_precipitation_param(parameter):
+                fig.add_trace(
+                    go.Bar(
+                        x=time_coords,
+                        y=fc_point.values,
+                        name=_fc_label,
+                        marker_color=self.color_palette["cf"],
+                        opacity=0.7,
+                    )
+                )
+            else:
+                fig.add_trace(
+                    go.Scatter(
+                        x=time_coords,
+                        y=fc_point.values,
+                        mode="lines",
+                        name=_fc_label,
+                        line={
+                            "color": self.color_palette["cf"],
+                            "width": 3,
+                            "dash": "dash",
+                        },
+                    )
+                )
 
         if nearest_station and "obs_line" in plot_types:
             obs_data = self._extract_observation_timeseries(
@@ -717,8 +1117,11 @@ class MeteogramPlotting:
             hovermode="x",
             plot_bgcolor="white",
             paper_bgcolor="white",
-            margin={"l": 70, "r": 140, "t": 100, "b": 70},
+            margin={"l": 70, "r": 40, "t": 100, "b": 120},
+            barmode="overlay" if self._is_precipitation_param(parameter) else None,
+            boxmode="overlay",
             xaxis={
+                "type": "date",
                 "gridwidth": 0.5,
                 "showgrid": True,
                 "gridcolor": "#E0E0E0",
@@ -746,14 +1149,15 @@ class MeteogramPlotting:
                 "ticks": "outside",
                 "ticklen": 5,
                 "tickcolor": "#000000",
+                "rangemode": "tozero" if self._is_precipitation_param(parameter) else "normal",
             },
             showlegend=True,
             legend={
-                "orientation": "v",
+                "orientation": "h",
                 "yanchor": "top",
-                "y": 0.98,
-                "xanchor": "left",
-                "x": 1.01,
+                "y": -0.18,
+                "xanchor": "center",
+                "x": 0.5,
                 "bgcolor": "rgba(255, 255, 255, 0.9)",
                 "bordercolor": "#CCCCCC",
                 "borderwidth": 1,

@@ -12,7 +12,6 @@ from datetime import date
 from tkinter import filedialog
 
 import ipywidgets as widgets
-from helpers.data_acquisition import MarsArchiveDataRetriever
 from helpers.parameter_mapper import ConfigurationManager
 from IPython.display import clear_output, display
 
@@ -31,7 +30,6 @@ class DataRetrieverUI:
     def __init__(self):
         """Initialize the widget interface."""
         self.widgets = {}
-        self.data_retriever = MarsArchiveDataRetriever()
         self.config_manager = ConfigurationManager()
         self.selected_file_path = None
         self.callbacks = None
@@ -419,7 +417,6 @@ class DataRetrieverUI:
                             and isinstance(lon, int | float)
                             and -90 <= lat <= 90  # noqa: PLR2004
                             and -180 <= lon <= 180  # noqa: PLR2004
-                            and not (lat is None or lon is None)
                         ):
                             lats.append(lat)
                             lons.append(lon)
@@ -750,85 +747,6 @@ class DataRetrieverUI:
                     <p><strong>Solution:</strong> Please type or paste your file path directly in the "File Path" field above.</p>
                     <p><strong>Example:</strong> <code>/home/username/data/weather_data.grib</code></p>
                     <p><em>Error details: {str(e)}</em></p>
-                </div>
-            """
-
-    def _validate_file_path(self, button):
-        """Validate the entered file path."""
-        file_path = self.widgets["file_path_input"].value.strip()
-
-        if not file_path:
-            self.widgets["local_info_display"].value = """
-                <div style="background-color: #FFEBEE; padding: 10px; border-radius: 5px; margin: 5px 0; border-left: 4px solid #F44336;">
-                    <h4 style="margin-top: 0; color: #F44336;">No Path Entered</h4>
-                    <p>Please enter a file path in the field above.</p>
-                </div>
-            """
-            return
-
-        try:
-            if os.path.exists(file_path):
-                if os.path.isfile(file_path):
-                    file_size = os.path.getsize(file_path)
-                    file_size_mb = file_size / (1024 * 1024)
-                    file_name = os.path.basename(file_path)
-
-                    with open(file_path, "rb") as f:
-                        f.read(1)
-
-                    self.widgets["local_info_display"].value = f"""
-                        <div style="background-color: #E8F5E8; padding: 10px; border-radius: 5px; margin: 5px 0; border-left: 4px solid #4CAF50;">
-                            <h4 style="margin-top: 0; color: #4CAF50;">✓ Valid File Path</h4>
-                            <p><strong>File:</strong> {file_name}</p>
-                            <p><strong>Size:</strong> {file_size_mb:.2f} MB</p>
-                            <p><strong>Path:</strong> {file_path}</p>
-                            <p><em>File is accessible and ready to load.</em></p>
-                        </div>
-                    """
-                else:
-                    self.widgets["local_info_display"].value = f"""
-                        <div style="background-color: #FFEBEE; padding: 10px; border-radius: 5px; margin: 5px 0; border-left: 4px solid #F44336;">
-                            <h4 style="margin-top: 0; color: #F44336;">Path Error</h4>
-                            <p>The path exists but is not a file (it may be a directory).</p>
-                            <p><strong>Path:</strong> {file_path}</p>
-                        </div>
-                    """
-            else:
-                dir_path = os.path.dirname(file_path)
-                if os.path.exists(dir_path):
-                    self.widgets["local_info_display"].value = f"""
-                        <div style="background-color: #FFF3E0; padding: 10px; border-radius: 5px; margin: 5px 0; border-left: 4px solid #FF9800;">
-                            <h4 style="margin-top: 0; color: #FF9800;">File Not Found</h4>
-                            <p>The directory exists but the file was not found.</p>
-                            <p><strong>Directory:</strong> {dir_path}</p>
-                            <p><strong>Looking for:</strong> {os.path.basename(file_path)}</p>
-                            <p>Please check the filename and extension.</p>
-                        </div>
-                    """
-                else:
-                    self.widgets["local_info_display"].value = f"""
-                        <div style="background-color: #FFEBEE; padding: 10px; border-radius: 5px; margin: 5px 0; border-left: 4px solid #F44336;">
-                            <h4 style="margin-top: 0; color: #F44336;">Path Not Found</h4>
-                            <p>Neither the file nor its directory exists.</p>
-                            <p><strong>Path:</strong> {file_path}</p>
-                            <p>Please check the complete path.</p>
-                        </div>
-                    """
-
-        except PermissionError:
-            self.widgets["local_info_display"].value = f"""
-                <div style="background-color: #FFEBEE; padding: 10px; border-radius: 5px; margin: 5px 0; border-left: 4px solid #F44336;">
-                    <h4 style="margin-top: 0; color: #F44336;">Permission Denied</h4>
-                    <p>The file exists but you don't have permission to read it.</p>
-                    <p><strong>Path:</strong> {file_path}</p>
-                </div>
-            """
-        except Exception as e:
-            self.widgets["local_info_display"].value = f"""
-                <div style="background-color: #FFEBEE; padding: 10px; border-radius: 5px; margin: 5px 0; border-left: 4px solid #F44336;">
-                    <h4 style="margin-top: 0; color: #F44336;">Validation Error</h4>
-                    <p><strong>Error:</strong> {str(e)}</p>
-                    <p><strong>Path:</strong> {file_path}</p>
                 </div>
             """
 
@@ -1296,8 +1214,6 @@ class DataRetrieverUI:
         if "file_path_input" in self.widgets:
             self.widgets["file_path_input"].value = ""
 
-        self.selected_file_path = None
-
         with self.widgets["output"]:
             clear_output()
 
@@ -1317,26 +1233,3 @@ class DataRetrieverUI:
                 self.map_widget.zoom = 4
             except Exception as e:
                 print(f"Error resetting map: {e}")
-
-    def get_widget(self, name):
-        """Get a specific widget by name.
-
-        Args:
-            name: Name of the widget to retrieve
-
-        Returns:
-            The widget instance or None if not found
-
-        """
-        return self.widgets.get(name)
-
-    def disable_all_widgets(self, disabled=True):
-        """Disable or enable all widgets (useful during processing).
-
-        Args:
-            disabled: Whether to disable (True) or enable (False) widgets
-
-        """
-        for widget in self.widgets.values():
-            if hasattr(widget, "disabled"):
-                widget.disabled = disabled
