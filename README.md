@@ -23,7 +23,10 @@ Ensemble forecast visualization and uncertainty quantification tools:
 ## 🚀 Getting Started
 See [GETTING_STARTED.md](GETTING_STARTED.md) for environment setup instructions.
 
-## 🛠️ Contributing  
+## � User Guide
+For a complete walkthrough of all three tools (with screenshots and configuration examples), see [USER_GUIDE.md](USER_GUIDE.md).
+
+## �🛠️ Contributing  
 We welcome contributions! Please review our guidelines in [CONTRIBUTING.md](CONTRIBUTING.md) for details on:  
 - Setting up the development environment  
 - Submitting pull requests  
