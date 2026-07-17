@@ -258,8 +258,11 @@ class TimeseriesUI:
 
     def detect_surface_variable_param(self, path):
         """Detect weather parameter from file path."""
-        params = ["10ff", "10fg", "2d", "2t", "tp", "tmin", "tmax"]
+        # mx2t/mn2t must come before 2t so they are matched first (2t is a
+        # substring of mx2t/mn2t and would otherwise produce false positives).
+        params = ["10ff", "10fg", "2d", "2t", "tp", "tmin", "tmax", "mx2t", "mn2t"]
         params = sorted(params, key=len, reverse=True)
+        # Normalise legacy names to ECMWF shortName equivalents
         param_mapping = {"tmax": "mx2t", "tmin": "mn2t"}
         path_obj = Path(path)
         path_parts = path_obj.parts
@@ -303,8 +306,8 @@ class TimeseriesUI:
                     "tp_deaccum": "tp",
                     "10ff": "10ff",
                     "10fg": "10fg",
-                    "2t_24h_max": "tmax",
-                    "2t_24h_min": "tmin",
+                    "2t_24h_max": "mx2t",
+                    "2t_24h_min": "mn2t",
                     "2d_24h_max": "2d",
                     "2d_24h_min": "2d",
                     "10ff_daily": "10ff",
@@ -556,8 +559,8 @@ class TimeseriesUI:
                 "tp_deaccum": "tp",
                 "10ff": "10ff",
                 "10fg": "10fg",
-                "2t_24h_max": "tmax",
-                "2t_24h_min": "tmin",
+                "2t_24h_max": "mx2t",
+                "2t_24h_min": "mn2t",
                 "2d_24h_max": "2d",
                 "2d_24h_min": "2d",
                 "10ff_daily": "10ff",
@@ -567,7 +570,9 @@ class TimeseriesUI:
                 "10fg_48h": "10fg",
             }
             expected_obs = forecast_to_obs.get(selected_param, selected_param)
-            if detected_param == expected_obs:
+            # Accept both naming conventions (mx2t ≡ tmax, mn2t ≡ tmin)
+            _aliases = {"tmax": "mx2t", "tmin": "mn2t", "mx2t": "mx2t", "mn2t": "mn2t"}
+            if _aliases.get(detected_param, detected_param) == _aliases.get(expected_obs, expected_obs):
                 parameter_matches = True
 
             if parameter_matches:
