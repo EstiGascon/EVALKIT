@@ -340,7 +340,7 @@ class MarsArchiveDataRetriever:
                 _os.makedirs(_mars_tmp, exist_ok=True)
                 _os.environ["TMPDIR"] = _mars_tmp
                 try:
-                    ds = ek.from_source(self.source, **request_params)
+                    ds = ek.from_source(self.source, **request_params).to("fieldlist")
                 finally:
                     if _orig_tmpdir is None:
                         _os.environ.pop("TMPDIR", None)
@@ -487,7 +487,7 @@ class MarsArchiveDataRetriever:
             _os.makedirs(_mars_tmp, exist_ok=True)
             _os.environ["TMPDIR"] = _mars_tmp
             try:
-                ds = ek.from_source(self.source, **request_params)
+                ds = ek.from_source(self.source, **request_params).to("fieldlist")
             finally:
                 if _orig_tmpdir is None:
                     _os.environ.pop("TMPDIR", None)
@@ -598,7 +598,7 @@ class MarsArchiveDataRetriever:
             raise FileNotFoundError(f"File not found: {file_path}")
 
         try:
-            ds = ek.from_source("file", file_path)
+            ds = ek.from_source("file", file_path).to("fieldlist")
             ds = ds.sel(step=lambda x: x != 0)
             return ds
 

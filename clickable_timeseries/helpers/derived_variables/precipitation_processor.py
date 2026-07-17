@@ -3,7 +3,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from earthkit.geo import nearest_point_haversine
+from earthkit.geo.distance import nearest_point_haversine
 from helpers.derived_variables.meteorological_calculations import (
     calculate_deaccumulated_precipitation,
 )

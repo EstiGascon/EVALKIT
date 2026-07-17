@@ -5,7 +5,7 @@ import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
 import plotly.graph_objects as go
 import xarray as xr  # type: ignore
-from earthkit.geo import nearest_point_haversine  # type: ignore
+from earthkit.geo.distance import nearest_point_haversine  # type: ignore
 from helpers.parameter_config_manager import ParameterConfigManager
 from helpers.styling_config import StylingConfiguration
 
@@ -301,7 +301,7 @@ class MeteogramPlotting:
 
         """
         dataset = (
-            ekd.from_source("file", data_source)
+            ekd.from_source("file", data_source).to("fieldlist")
             if isinstance(data_source, str)
             else data_source
         )

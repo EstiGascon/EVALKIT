@@ -735,7 +735,7 @@ class DataManagementCallbacks:
             if file_path in self.parent.file_validation_cache:
                 return self.parent.file_validation_cache[file_path]
 
-            ds = ek.data.from_source("file", file_path)
+            ds = ek.data.from_source("file", file_path).to("fieldlist")
             is_valid = len(ds) > 0
 
             self.parent.file_validation_cache[file_path] = is_valid
@@ -761,7 +761,7 @@ class DataManagementCallbacks:
 
         """
         try:
-            ds = ek.data.from_source("file", file_path)
+            ds = ek.data.from_source("file", file_path).to("fieldlist")
 
             parameters = set()
             for field in ds:
@@ -802,7 +802,7 @@ class DataManagementCallbacks:
 
         """
         try:
-            ds = ek.data.from_source("file", file_path)
+            ds = ek.data.from_source("file", file_path).to("fieldlist")
 
             if len(ds) > 0:
                 first_field = ds[0]

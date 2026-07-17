@@ -149,9 +149,8 @@ class StampsPlotting:
                         ws_da.attrs.pop("GRIB_units", None)
                     else:
                         # No xarray available — build from lat/lon
-                        ll = u_field.to_latlon()
-                        lats = np.asarray(ll["lat"]).flatten()
-                        lons = np.asarray(ll["lon"]).flatten()
+                        lats = np.asarray(u_field.geography.latitudes()).flatten()
+                        lons = np.asarray(u_field.geography.longitudes()).flatten()
                         ws_values = np.sqrt(u_arr ** 2 + v_arr ** 2)
                         ws_da = xr.DataArray(
                             ws_values.reshape(lats.shape),

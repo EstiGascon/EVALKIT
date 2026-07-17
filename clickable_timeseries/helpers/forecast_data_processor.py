@@ -1,7 +1,7 @@
 from typing import Any
 
 import pandas as pd
-from earthkit.geo import nearest_point_haversine
+from earthkit.geo.distance import nearest_point_haversine
 
 
 class ForecastDataProcessor:
@@ -101,8 +101,10 @@ class ForecastDataProcessor:
             if model not in self.station_distances:
                 self.station_distances[model] = {}
 
-            latlon = param_dataset.to_latlon()
-            self.grid_coordinates[model] = {"lat": latlon["lat"], "lon": latlon["lon"]}
+            self.grid_coordinates[model] = {
+                "lat": param_dataset.geography.latitudes(),
+                "lon": param_dataset.geography.longitudes(),
+            }
 
             return True
 

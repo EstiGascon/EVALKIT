@@ -332,7 +332,7 @@ class ForecastDataLoader:
             os.environ["TMPDIR"] = _mars_tmp
 
             try:
-                ds = ekd.from_source("mars", **request_params)
+                ds = ekd.from_source("mars", **request_params).to("fieldlist")
             finally:
                 if _orig_tmpdir is None:
                     os.environ.pop("TMPDIR", None)
@@ -429,11 +429,11 @@ class ForecastDataLoader:
             )
             ds_nocache = None
             with _ekd.settings.temporary("cache-policy", "off"):
-                ds_nocache = _ekd.from_source("mars", **request_params)
+                ds_nocache = _ekd.from_source("mars", **request_params).to("fieldlist")
                 if len(ds_nocache) > 0:
-                    ds_nocache.save(stable_path)
+                    ds_nocache.to_target(stable_path)
             if ds_nocache is not None and len(ds_nocache) > 0:
-                ds_stable = _ekd.from_source("file", stable_path)
+                ds_stable = _ekd.from_source("file", stable_path).to("fieldlist")
                 print(f"✅ MARS (no-cache) retrieved {len(ds_stable)} field(s) for {model}")
                 return ds_stable
             print(f"⚠️  MARS (no-cache) also returned 0 fields for {model} — trying pyfdb...")
@@ -451,7 +451,7 @@ class ForecastDataLoader:
             print(f"[pyfdb] FDB fallback unavailable for {model}: {e}")
 
         # All fallbacks exhausted — return empty dataset so caller can report
-        return ekd.from_source("file", [])
+        return ekd.from_source("file", []).to("fieldlist")
 
     def _retrieve_via_pyfdb(self, request_params: dict):
         """Retrieve data directly from FDB using pyfdb, bypassing MARS.
@@ -520,7 +520,7 @@ class ForecastDataLoader:
                     if not chunk:
                         break
                     f.write(chunk)
-            return ekd.from_source("file", tmp_path)
+            return ekd.from_source("file", tmp_path).to("fieldlist")
         except Exception as e:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
@@ -622,7 +622,7 @@ class ForecastDataLoader:
 
         """
         try:
-            ds = ekd.from_source("file", grib_file_path)
+            ds = ekd.from_source("file", grib_file_path).to("fieldlist")
             return ds
         except Exception as e:
             print(f"❌ Failed to load GRIB file {grib_file_path}: {e}")

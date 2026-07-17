@@ -1231,7 +1231,7 @@ class EnsembleDataRetriever:
                             break
                         f.write(chunk)
 
-            ds = ek.data.from_source("file", tmp_path)
+            ds = ek.data.from_source("file", tmp_path).to("fieldlist")
             n_fdb = len(ds)
             print(f"[pyfdb] FDB returned {n_fdb} field(s)")
             # Warn when fewer steps came back than were requested so that any
@@ -1393,7 +1393,7 @@ class EnsembleDataRetriever:
         tempfile.tempdir = _MARS_TMP
 
         try:
-            ds = ek.data.from_source("mars", **request_params)
+            ds = ek.data.from_source("mars", **request_params).to("fieldlist")
             n_fields = len(ds)
             if n_fields == 0:
                 # MARS may return 0 fields for two reasons:
@@ -1418,11 +1418,11 @@ class EnsembleDataRetriever:
                     # cleaned up when the context exits.  Save inside the context
                     # while the backing file still exists.
                     with _ekd.settings.temporary("cache-policy", "off"):
-                        ds_nocache = ek.data.from_source("mars", **request_params)
+                        ds_nocache = ek.data.from_source("mars", **request_params).to("fieldlist")
                         if len(ds_nocache) > 0:
-                            ds_nocache.save(stable_path)
+                            ds_nocache.to_target(stable_path)
                     if ds_nocache is not None and len(ds_nocache) > 0:
-                        ds_stable = ek.data.from_source("file", stable_path)
+                        ds_stable = ek.data.from_source("file", stable_path).to("fieldlist")
                         print(
                             f"✅ MARS (no-cache) retrieved {len(ds_stable)} field(s)"
                         )
@@ -1574,7 +1574,7 @@ class EnsembleDataRetriever:
             print(f"Warning: {data_type} file not found: {file_path}")
             return None
 
-        ds = ek.data.from_source("file", file_path)
+        ds = ek.data.from_source("file", file_path).to("fieldlist")
         ds = self._process_local_grib_calculations(ds, data_type=data_type)
 
         metadata = {}
@@ -1691,7 +1691,7 @@ class EnsembleDataRetriever:
                 print(f"Warning: {data_type} file not found: {file_path}")
                 continue
 
-            ds = ek.data.from_source("file", file_path)
+            ds = ek.data.from_source("file", file_path).to("fieldlist")
             ds = self._process_local_grib_calculations(ds, data_type=data_type)
 
             combined_ds = ds if combined_ds is None else combined_ds + ds

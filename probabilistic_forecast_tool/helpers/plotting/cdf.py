@@ -10,7 +10,7 @@ from datetime import datetime
 import earthkit.data as ekd
 import matplotlib.pyplot as plt
 import numpy as np
-from earthkit.geo import nearest_point_haversine
+from earthkit.geo.distance import nearest_point_haversine
 from helpers.parameter_config_manager import ParameterConfigManager
 from helpers.styling_config import StylingConfiguration
 
@@ -1128,7 +1128,7 @@ class CDFPlotting:
 
         if isinstance(data_source, str):
             try:
-                loaded_data = ekd.from_source("file", data_source)
+                loaded_data = ekd.from_source("file", data_source).to("fieldlist")
                 try:
                     return loaded_data.sel(shortName=mapped_param)
                 except (AttributeError, KeyError):

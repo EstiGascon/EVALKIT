@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import earthkit.data as ekd  # type: ignore
 import numpy as np  # type: ignore
 import plotly.graph_objects as go  # type: ignore
-from earthkit.geo import nearest_point_haversine  # type: ignore
+from earthkit.geo.distance import nearest_point_haversine  # type: ignore
 from helpers.parameter_config_manager import ParameterConfigManager
 from helpers.styling_config import StylingConfiguration
 
@@ -498,7 +498,7 @@ class PlumesPlotting:
 
         """
         data = (
-            ekd.from_source("file", data_source)
+            ekd.from_source("file", data_source).to("fieldlist")
             if isinstance(data_source, str)
             else data_source
         )
@@ -636,9 +636,8 @@ class PlumesPlotting:
 
         # Find nearest gridpoint index from the first field
         first_field = selected[0]
-        latlon = first_field.to_latlon()
         idx, _ = nearest_point_haversine(
-            [lat, lon], (latlon["lat"], latlon["lon"])
+            [lat, lon], (first_field.geography.latitudes(), first_field.geography.longitudes())
         )
 
         # Collect (step, number) → value for every field

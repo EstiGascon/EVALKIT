@@ -3,7 +3,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from earthkit.geo import nearest_point_haversine
+from earthkit.geo.distance import nearest_point_haversine
 
 
 class WindSpeedProcessor:
@@ -103,9 +103,8 @@ class WindSpeedProcessor:
                 return None
 
             # Extract lat/lon arrays once from the first field (shared grid)
-            latlon = u_fields.to_latlon()
-            grid_lat = latlon["lat"]
-            grid_lon = latlon["lon"]
+            grid_lat = u_fields.geography.latitudes()
+            grid_lon = u_fields.geography.longitudes()
 
             wind_speed_records = []
 

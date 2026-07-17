@@ -521,7 +521,7 @@ class EnsembleCallbacks:
                         ds = self.current_data[key].get("dataset")
                         if ds is not None:
                             fname = output_dir / f"{date_str}_{key}.grib"
-                            ds.save(str(fname))
+                            ds.to_target(str(fname))
                             saved_files.append(str(fname))
 
             elif plot_type == "stamps":
@@ -531,7 +531,7 @@ class EnsembleCallbacks:
                         ds = self.current_data[key].get("dataset")
                         if ds is not None:
                             fname = output_dir / f"{date_str}_{key}.grib"
-                            ds.save(str(fname))
+                            ds.to_target(str(fname))
                             saved_files.append(str(fname))
 
             elif plot_type == "cdf":
@@ -540,7 +540,7 @@ class EnsembleCallbacks:
                     ds = self.current_data["cd"].get("dataset")
                     if ds is not None:
                         fname = output_dir / f"{date_str}_cd.grib"
-                        ds.save(str(fname))
+                        ds.to_target(str(fname))
                         saved_files.append(str(fname))
 
                 forecast_data = self.current_data.get("forecast_data", {})
@@ -551,7 +551,7 @@ class EnsembleCallbacks:
                         if ds is not None:
                             safe_key = scenario_key.replace("/", "_").replace(" ", "_")
                             fname = output_dir / f"{date_str}_{safe_key}.grib"
-                            ds.save(str(fname))
+                            ds.to_target(str(fname))
                             saved_files.append(str(fname))
 
             if saved_files:

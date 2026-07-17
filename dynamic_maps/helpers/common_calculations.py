@@ -155,7 +155,7 @@ class WeatherDataAggregator:
             try:
                 temp_file = "/tmp/temp_aggregated.nc"
                 result_ds.to_netcdf(temp_file)
-                return ekd.from_source("file", temp_file)
+                return ekd.from_source("file", temp_file).to("fieldlist")
             except ImportError:
                 print("Warning: earthkit not available, returning xarray dataset")
                 return result_ds
