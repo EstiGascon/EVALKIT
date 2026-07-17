@@ -208,6 +208,50 @@ class TemperatureProcessor:
             print(f"Error extracting time info: {e}")
             return {}
 
+    def _extract_coordinate_info(self, field) -> dict:
+        """Extract grid coordinate metadata from a GRIB field.
+
+        Args:
+            field: A single earthkit GRIB field.
+
+        Returns:
+            Dictionary with grid bounding-box and dimension keys expected by
+            _extract_nearest_value:
+                latitudeOfFirstGridPointInDegrees, longitudeOfFirstGridPointInDegrees,
+                latitudeOfLastGridPointInDegrees, longitudeOfLastGridPointInDegrees,
+                Ni, Nj.
+            Returns an empty dict on failure so callers can fall back gracefully.
+        """
+        try:
+            metadata = field.metadata()
+
+            def _get(key):
+                if hasattr(metadata, "get"):
+                    return metadata.get(key)
+                try:
+                    return metadata(key)
+                except Exception:
+                    return None
+
+            coord_info = {}
+            for key in [
+                "latitudeOfFirstGridPointInDegrees",
+                "longitudeOfFirstGridPointInDegrees",
+                "latitudeOfLastGridPointInDegrees",
+                "longitudeOfLastGridPointInDegrees",
+                "Ni",
+                "Nj",
+            ]:
+                val = _get(key)
+                if val is not None:
+                    coord_info[key] = val
+
+            return coord_info
+
+        except Exception as e:
+            print(f"Error extracting coordinate info: {e}")
+            return {}
+
     def _calculate_daily_extremes(  # noqa: PLR0912, PLR0915
         self, temp_data, model_name: str, temp_param: str, extreme_type: str
     ):
