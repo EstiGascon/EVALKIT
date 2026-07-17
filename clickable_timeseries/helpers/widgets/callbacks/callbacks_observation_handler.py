@@ -395,50 +395,17 @@ class ObservationHandler:
                 )
 
                 if not forecast_time_validation["is_valid"]:
-                    StatusMessageHandler.show_obs_warning(
+                    StatusMessageHandler.show_obs_info(
                         self.ui.widgets["obs_info_display"],
-                        f"⚠️ Time Range Mismatch<br><br>"
+                        f"ℹ️ Time ranges differ — all data loaded<br><br>"
                         f"<strong>Observation:</strong> {start_obs_date.strftime('%Y-%m-%d %H:%M')} – {end_obs_date.strftime('%Y-%m-%d %H:%M')}<br>"
                         f"<strong>Forecast:</strong> {forecast_time_validation['forecast_start'].strftime('%Y-%m-%d %H:%M')} – {forecast_time_validation['forecast_end'].strftime('%Y-%m-%d %H:%M')}<br>"
-                        f"<strong>Note:</strong> {forecast_time_validation['error_message']}<br>"
-                        f"Only the overlapping period will be plotted.",
+                        f"Each dataset will be plotted with its own available time period.",
                     )
 
-                # Filter geo files to the forecast valid-time window so that
-                # the 'Explore observation lead times' slider only shows
-                # timesteps that overlap with the loaded forecast.
-                fc_start = forecast_time_validation.get("forecast_start")
-                fc_end = forecast_time_validation.get("forecast_end")
-                if fc_start is not None and fc_end is not None:
-                    try:
-                        import pandas as _pd
-                        # Normalise to naive UTC for comparison with
-                        # parse_filename_datetime which returns naive datetimes.
-                        def _to_naive(ts):
-                            ts = _pd.Timestamp(ts)
-                            return ts.tz_convert(None) if ts.tzinfo is not None else ts
-                        fc_start_naive = _to_naive(fc_start)
-                        fc_end_naive = _to_naive(fc_end)
-                        def _in_range(fp):
-                            dt = DateTimeExtractor.parse_filename_datetime(os.path.basename(fp))
-                            return dt is None or (fc_start_naive <= _pd.Timestamp(dt) <= fc_end_naive)
-                        filtered_geo = [fp for fp in geo_files if _in_range(fp)]
-                        if filtered_geo:
-                            n_before = len(geo_files)
-                            geo_files = filtered_geo
-                            if len(geo_files) < n_before:
-                                print(
-                                    f"ℹ️  Filtered observation files to forecast period: "
-                                    f"{len(geo_files)}/{n_before} file(s) "
-                                    f"({fc_start_naive} – {fc_end_naive})"
-                                )
-                        else:
-                            print(
-                                "⚠️  No observation files match the forecast period exactly; "
-                                "loading all files from folder."
-                            )
-                    except Exception as _fe:
-                        print(f"⚠️  Could not filter geo files by forecast period: {_fe}")
+                # Do NOT filter geo files — load all observations regardless of
+                # whether they fall inside the forecast window so that the user
+                # can see each dataset over its full available period.
 
             all_stations = self.observation_processor.create_stations_geodataframe(
                 self.ui.selected_observation_folder
