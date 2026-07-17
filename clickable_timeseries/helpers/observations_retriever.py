@@ -31,7 +31,13 @@ class ObservationsRetriever:
             },
             "tmax": {"supported_periods": [24], "times_map": {24: "00"}},
             "tmin": {"supported_periods": [24], "times_map": {24: "00"}},
+            # ECMWF shortName aliases for tmax/tmin
+            "mx2t": {"supported_periods": [24], "times_map": {24: "00"}},
+            "mn2t": {"supported_periods": [24], "times_map": {24: "00"}},
         }
+
+    # Map ECMWF shortNames to the legacy names expected by vino_getgeo
+    _VINO_PARAM_MAP = {"mx2t": "tmax", "mn2t": "tmin"}
 
     def get_parameter_info(self, parameter: str) -> dict:
         """Get information about parameter requirements.
@@ -126,6 +132,8 @@ class ObservationsRetriever:
             str: Complete output path
 
         """
+        # Normalise ECMWF shortNames to the names used internally
+        parameter = self._VINO_PARAM_MAP.get(parameter, parameter)
         param_info = self.get_parameter_info(parameter)
 
         if param_info["type"] == "instantaneous":
@@ -166,6 +174,9 @@ class ObservationsRetriever:
             FileNotFoundError: If the VINO executable is not found at the configured path.
 
         """
+        # Normalise ECMWF shortNames to the names vino_getgeo expects
+        parameter = self._VINO_PARAM_MAP.get(parameter, parameter)
+
         validation = self.validate_parameter_config(parameter, period)
         if not validation["is_valid"]:
             raise ValueError(validation.get("error", "Invalid parameter configuration"))
