@@ -516,6 +516,22 @@ class ObservationHandler:
     # Colour-mapping helpers
     # ------------------------------------------------------------------
 
+    # Temperature parameters whose raw geo file values are in Kelvin
+    _KELVIN_PARAMS = {"2t", "2d", "tmax", "tmin"}
+
+    def _apply_unit_conversion(self, vmin, vmax):
+        """Convert raw values to display units; return (disp_vmin, disp_vmax, unit_str).
+
+        Temperature observations in geo files are stored in Kelvin. Convert to
+        Celsius for display when the loaded parameter is a temperature parameter,
+        detected either by parameter name or by a Kelvin heuristic (value > 200).
+        """
+        param = getattr(self, "observation_loaded_parameter", None) or ""
+        is_temp = param in self._KELVIN_PARAMS or (vmin > 200 and vmax > 200)
+        if is_temp:
+            return vmin - 273.15, vmax - 273.15, "°C"
+        return vmin, vmax, ""
+
     @staticmethod
     def _value_to_hex(value, vmin, vmax):
         """Map a scalar value to a hex colour using a RdYlBu_r colormap."""
@@ -616,7 +632,8 @@ class ObservationHandler:
 
             # Update colorbar
             if "obs_colorbar" in self.ui.widgets:
-                cb_html = self._build_colorbar_html(vmin, vmax)
+                disp_vmin, disp_vmax, unit = self._apply_unit_conversion(vmin, vmax)
+                cb_html = self._build_colorbar_html(disp_vmin, disp_vmax, unit)
                 self.ui.widgets["obs_colorbar"].value = cb_html
                 self.ui.widgets["obs_colorbar"].layout.display = ""
 
@@ -764,14 +781,12 @@ class ObservationHandler:
                 self.map_handler.observation_markers[station_id] = marker
                 markers.append(marker)
 
-            # Replace the entire layer group at once
-            new_layer_group = ipyleaflet.LayerGroup(
-                layers=markers, name="observation_stations"
-            )
-            self.map_handler.map_widget.substitute_layer(
-                self.map_handler.observation_layer_group, new_layer_group
-            )
-            self.map_handler.observation_layer_group = new_layer_group
+            # Update the existing layer group's layers in-place so that
+            # individual marker widget comms remain properly established.
+            # substitute_layer creates a new LayerGroup whose children may
+            # lose comm links, preventing later marker.color updates from
+            # reaching the frontend.
+            self.map_handler.observation_layer_group.layers = tuple(markers)
 
             # Activate lead-time explorer controls
             if n_times > 0 and "obs_time_explorer" in self.ui.widgets:
@@ -787,7 +802,8 @@ class ObservationHandler:
 
             # Show colorbar if values available
             if has_values and vmin != vmax and "obs_colorbar" in self.ui.widgets:
-                self.ui.widgets["obs_colorbar"].value = self._build_colorbar_html(vmin, vmax)
+                disp_vmin, disp_vmax, unit = self._apply_unit_conversion(vmin, vmax)
+                self.ui.widgets["obs_colorbar"].value = self._build_colorbar_html(disp_vmin, disp_vmax, unit)
                 self.ui.widgets["obs_colorbar"].layout.display = ""
 
         except Exception as e:
