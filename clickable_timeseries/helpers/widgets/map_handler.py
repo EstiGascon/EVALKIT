@@ -324,9 +324,9 @@ class WeatherMapHandler:
             return False
 
     def _update_observation_marker_color(self, station_id, color, selected=False):
-        """Add or remove a colored overlay marker for an observation station."""
+        """Update the colour of an observation station marker on the map."""
         try:
-            # Remove existing overlay if present
+            # Remove existing marker
             if station_id in self.observation_markers:
                 old = self.observation_markers.pop(station_id)
                 try:
@@ -334,11 +334,7 @@ class WeatherMapHandler:
                 except Exception:
                     pass
 
-            if not selected:
-                # Deselected — the GeoJSON layer shows the gray circle
-                return
-
-            # Create colored overlay for selected station
+            # Get station location (needed for both selected and deselected)
             gdf = getattr(getattr(self.ui, "callbacks", None), "observation_stations_gdf", None)
             if gdf is None or station_id not in gdf.index:
                 return
@@ -346,6 +342,22 @@ class WeatherMapHandler:
             info = gdf.loc[station_id]
             lat, lon = info["latitude"], info["longitude"]
 
+            if not selected:
+                # Restore a grey unselected marker so the station stays visible
+                grey_marker = ipyleaflet.CircleMarker(
+                    location=(lat, lon),
+                    radius=5,
+                    color="#949190",
+                    fill_color="#949190",
+                    fill_opacity=0.85,
+                    opacity=1.0,
+                    weight=1,
+                )
+                self.observation_markers[station_id] = grey_marker
+                self.observation_layer_group.add_layer(grey_marker)
+                return
+
+            # Create larger coloured marker for selected station
             new_marker = ipyleaflet.CircleMarker(
                 location=(lat, lon),
                 radius=10,
