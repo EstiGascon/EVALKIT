@@ -108,8 +108,8 @@ class ObservationHandler:
         "tp_deaccum": "tp",
         "10ff": "10ff",
         "10fg": "10fg",
-        "2t_24h_max": "tmax",
-        "2t_24h_min": "tmin",
+        "2t_24h_max": "mx2t",
+        "2t_24h_min": "mn2t",
         "2d_24h_max": "2d",
         "2d_24h_min": "2d",
         "10ff_daily": "10ff",
@@ -119,8 +119,16 @@ class ObservationHandler:
         "10fg_48h": "10fg",
     }
 
+    # Equivalent names for the same parameter (different naming conventions)
+    _OBS_PARAM_ALIASES: dict[str, str] = {
+        "tmax": "mx2t",
+        "tmin": "mn2t",
+        "mx2t": "mx2t",
+        "mn2t": "mn2t",
+    }
+
     # Known observation parameter names for matching against GEO filenames
-    KNOWN_OBS_PARAMS = ["10fg", "10ff", "tmax", "tmin", "2t", "2d", "tp"]
+    KNOWN_OBS_PARAMS = ["10fg", "10ff", "mx2t", "mn2t", "tmax", "tmin", "2t", "2d", "tp"]
 
     @staticmethod
     def _extract_obs_parameter_from_geo_files(geo_files):
@@ -156,7 +164,12 @@ class ObservationHandler:
             # Check parameter compatibility
             if selected_param and self.observation_loaded_parameter:
                 expected_obs = self.FORECAST_TO_OBS_PARAM.get(selected_param)
-                if expected_obs and expected_obs != self.observation_loaded_parameter:
+                # Normalise both sides through the alias table so that
+                # e.g. "tmax" and "mx2t" are treated as equivalent.
+                def _normalise(p):
+                    return self._OBS_PARAM_ALIASES.get(p, p)
+
+                if expected_obs and _normalise(expected_obs) != _normalise(self.observation_loaded_parameter):
                     StatusMessageHandler.show_obs_warning(
                         self.ui.widgets["obs_info_display"],
                         f"⚠️ Parameter mismatch: loaded observations are for "
@@ -517,7 +530,7 @@ class ObservationHandler:
     # ------------------------------------------------------------------
 
     # Temperature parameters whose raw geo file values are in Kelvin
-    _KELVIN_PARAMS = {"2t", "2d", "tmax", "tmin"}
+    _KELVIN_PARAMS = {"2t", "2d", "tmax", "tmin", "mx2t", "mn2t"}
 
     def _apply_unit_conversion(self, vmin, vmax):
         """Convert raw values to display units; return (disp_vmin, disp_vmax, unit_str).
