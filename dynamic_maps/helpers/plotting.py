@@ -262,9 +262,9 @@ class SurfaceVariablesMapsRender:
         else:
             try:
                 if step is not None:
-                    field = data.sel(param=parameter_name, step=step)[0]
+                    field = data.sel({"parameter.variable": parameter_name, "time.step": step})[0]
                 else:
-                    field = data.sel(param=parameter_name)[0]
+                    field = data.sel({"parameter.variable": parameter_name})[0]
 
                 date = field.metadata("date")
                 time = field.metadata("time")
@@ -273,17 +273,17 @@ class SurfaceVariablesMapsRender:
 
                 if is_reduced and regrid:
                     if step is not None:
-                        field_data = data.sel(param=parameter_name, step=step)
+                        field_data = data.sel({"parameter.variable": parameter_name, "time.step": step})
                     else:
-                        field_data = data.sel(param=parameter_name)
+                        field_data = data.sel({"parameter.variable": parameter_name})
 
                     data = self._regrid_to_regular(
                         field_data, parameter_name, target_resolution=target_resolution
                     )
                 elif step is not None:
-                    data = data.sel(param=parameter_name, step=step).to_xarray()
+                    data = data.sel({"parameter.variable": parameter_name, "time.step": step}).to_xarray()
                 else:
-                    data = data.sel(param=parameter_name).to_xarray()
+                    data = data.sel({"parameter.variable": parameter_name}).to_xarray()
 
             except Exception as e:
                 print(f"Error processing data: {e}")
@@ -469,13 +469,13 @@ class SurfaceVariablesMapsRender:
             if steps is None:
                 steps = [int(step) for step in data["step"].values]
         else:
-            first_field = data.sel(param=parameter_name)[0]
+            first_field = data.sel({"parameter.variable": parameter_name})[0]
             date = first_field.metadata("date")
             time = first_field.metadata("time")
 
             if steps is None:
                 steps = set()
-                for field in data.sel(param=parameter_name):
+                for field in data.sel({"parameter.variable": parameter_name}):
                     steps.add(field.metadata("step"))
                 steps = sorted(steps)
 
@@ -515,7 +515,7 @@ class SurfaceVariablesMapsRender:
                         target_resolution=target_resolution,
                     )
             else:
-                step_data_raw = data.sel(param=parameter_name, step=step)
+                step_data_raw = data.sel({"parameter.variable": parameter_name, "time.step": step})
 
                 if is_reduced and regrid:
                     step_data = self._regrid_to_regular(
@@ -683,9 +683,9 @@ class SurfaceVariablesMapsRender:
 
         """
         if step:
-            data_subset = data.sel(param=parameter_name, step=step)
+            data_subset = data.sel({"parameter.variable": parameter_name, "time.step": step})
         else:
-            data_subset = data.sel(param=parameter_name)
+            data_subset = data.sel({"parameter.variable": parameter_name})
         chart = ek.plots.Map()
         chart.point_cloud(data_subset, units=units)
         chart.coastlines()

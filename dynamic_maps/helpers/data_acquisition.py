@@ -599,7 +599,7 @@ class MarsArchiveDataRetriever:
 
         try:
             ds = ek.from_source("file", file_path).to("fieldlist")
-            ds = ds.sel(step=lambda x: x != 0)
+            ds = ds.new_mask_index(where=lambda f: f.metadata('step') != 0)
             return ds
 
         except Exception as e:

@@ -77,8 +77,8 @@ class WindSpeedProcessor:
 
         """
         try:
-            u_fields = dataset.sel(param="10u")
-            v_fields = dataset.sel(param="10v")
+            u_fields = dataset.sel({'parameter.variable': '10u'})
+            v_fields = dataset.sel({'parameter.variable': '10v'})
             return len(u_fields) > 0 and len(v_fields) > 0
         except Exception:
             return False
@@ -96,15 +96,15 @@ class WindSpeedProcessor:
 
         """
         try:
-            u_fields = dataset.sel(param="10u")
-            v_fields = dataset.sel(param="10v")
+            u_fields = dataset.sel({'parameter.variable': '10u'})
+            v_fields = dataset.sel({'parameter.variable': '10v'})
 
             if len(u_fields) == 0 or len(v_fields) == 0:
                 return None
 
             # Extract lat/lon arrays once from the first field (shared grid)
-            grid_lat = u_fields.geography.latitudes()
-            grid_lon = u_fields.geography.longitudes()
+            grid_lat = u_fields.geography.latitudes().flatten()
+            grid_lon = u_fields.geography.longitudes().flatten()
 
             wind_speed_records = []
 

@@ -454,7 +454,7 @@ class SurfaceVariableCalculatorUI:
                     for precip_type in precip_types:
                         try:
                             precip_data = (
-                                dataset.sel(param=precip_type)
+                                dataset.sel({"parameter.variable": precip_type})
                                 if hasattr(dataset, "sel")
                                 else [
                                     field
@@ -493,7 +493,7 @@ class SurfaceVariableCalculatorUI:
 
                 elif calc_type == "wind_speed":
                     u_wind = (
-                        dataset.sel(param=["10u", "u10"])
+                        dataset.sel({"parameter.variable": ["10u", "u10"]})
                         if hasattr(dataset, "sel")
                         else [
                             field
@@ -502,7 +502,7 @@ class SurfaceVariableCalculatorUI:
                         ]
                     )
                     v_wind = (
-                        dataset.sel(param=["10v", "v10"])
+                        dataset.sel({"parameter.variable": ["10v", "v10"]})
                         if hasattr(dataset, "sel")
                         else [
                             field
@@ -532,7 +532,7 @@ class SurfaceVariableCalculatorUI:
                         param_data = self.all_calculated_data[selected_param]
                     else:
                         param_data = (
-                            dataset.sel(param=selected_param)
+                            dataset.sel({"parameter.variable": selected_param})
                             if hasattr(dataset, "sel")
                             else [
                                 field

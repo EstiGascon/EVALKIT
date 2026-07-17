@@ -1865,8 +1865,8 @@ class EnsembleDataRetriever:
 
         """
         try:
-            u_fields = ds.sel(param=["10u", "165.128"])
-            v_fields = ds.sel(param=["10v", "166.128"])
+            u_fields = ds.sel({"parameter.variable": ["10u", "165.128"]})
+            v_fields = ds.sel({"parameter.variable": ["10v", "166.128"]})
 
             if len(u_fields) == 0 or len(v_fields) == 0:
                 return ds
@@ -1932,7 +1932,7 @@ class EnsembleDataRetriever:
         """
         try:
             precip_params = ["tp", "lsp", "cp"]
-            precip_fields = ds.sel(param=precip_params)
+            precip_fields = ds.sel({"parameter.variable": precip_params})
 
             if len(precip_fields) == 0:
                 return ds
@@ -1950,7 +1950,7 @@ class EnsembleDataRetriever:
 
             for param in precip_params:
                 try:
-                    param_fields = ds.sel(param=[param])
+                    param_fields = ds.sel({"parameter.variable": [param]})
 
                     if len(param_fields) > 0:
                         result_6h = self._calculate_6h_precipitation_grib(
@@ -1964,7 +1964,7 @@ class EnsembleDataRetriever:
                     traceback.print_exc()
 
                     try:
-                        param_fields = ds.sel(param=[param])
+                        param_fields = ds.sel({"parameter.variable": [param]})
                         for field in param_fields:
                             all_6h_fields.append(field)
                     except:  # noqa: E722

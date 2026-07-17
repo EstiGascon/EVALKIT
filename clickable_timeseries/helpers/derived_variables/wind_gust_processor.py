@@ -82,7 +82,7 @@ class WindGustProcessor:
 
         """
         try:
-            gust_fields = dataset.sel(param="10fg")
+            gust_fields = dataset.sel({'parameter.variable': '10fg'})
             return len(gust_fields) > 0
         except Exception:
             return False
@@ -99,14 +99,14 @@ class WindGustProcessor:
 
         """
         try:
-            gust_fields = dataset.sel(param="10fg")
+            gust_fields = dataset.sel({'parameter.variable': '10fg'})
 
             if len(gust_fields) == 0:
                 return None
 
             # Extract lat/lon arrays once from the first field (shared grid)
-            grid_lat = gust_fields.geography.latitudes()
-            grid_lon = gust_fields.geography.longitudes()
+            grid_lat = gust_fields.geography.latitudes().flatten()
+            grid_lon = gust_fields.geography.longitudes().flatten()
 
             gust_records = []
 

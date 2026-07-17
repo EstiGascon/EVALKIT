@@ -110,7 +110,7 @@ def calculate_deaccumulated_precipitation(
             print(
                 f"Filtering dataset to parameter '{parameter}' before xarray conversion"
             )
-            filtered_ds = data_ds.sel(param=parameter)
+            filtered_ds = data_ds.sel({'parameter.variable': parameter})
             xr_ds = filtered_ds.to_xarray()
             print(f"Successfully converted filtered {parameter} data to xarray")
         except Exception as filter_error:

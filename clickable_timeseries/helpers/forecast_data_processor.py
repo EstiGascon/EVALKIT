@@ -79,14 +79,14 @@ class ForecastDataProcessor:
 
             temperature_params = ["mx2t", "mn2t"]
             is_temperature = param in temperature_params
-            param_dataset = ds.sel(param=param)
+            param_dataset = ds.sel({'parameter.variable': param})
             if is_temperature:
                 try:
                     steps = param_dataset.metadata("step")
                     if steps and 0 in steps:
-                        param_dataset = param_dataset.sel(step=lambda x: x != 0)
+                        param_dataset = param_dataset.new_mask_index(where=lambda f: f.metadata('step') != 0)
                 except Exception:
-                    param_dataset = ds.sel(param=param)
+                    param_dataset = ds.sel({'parameter.variable': param})
 
             self.current_param = param
             self.datasets[model] = param_dataset
@@ -102,8 +102,8 @@ class ForecastDataProcessor:
                 self.station_distances[model] = {}
 
             self.grid_coordinates[model] = {
-                "lat": param_dataset.geography.latitudes(),
-                "lon": param_dataset.geography.longitudes(),
+                "lat": param_dataset.geography.latitudes().flatten(),
+                "lon": param_dataset.geography.longitudes().flatten(),
             }
 
             return True

@@ -99,7 +99,7 @@ class TemperatureProcessor:
 
         for param in ["2t", "2d"]:
             try:
-                temp_fields = dataset.sel(param=param)
+                temp_fields = dataset.sel({'parameter.variable': param})
                 if len(temp_fields) > 0:
                     available_params.append(param)
             except Exception:
@@ -120,7 +120,7 @@ class TemperatureProcessor:
 
         """
         try:
-            temp_fields = dataset.sel(param=temp_param)
+            temp_fields = dataset.sel({'parameter.variable': temp_param})
 
             if len(temp_fields) == 0:
                 return None

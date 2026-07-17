@@ -196,7 +196,7 @@ class MeteogramPlotting:
 
         if hasattr(data_source, "sel"):
             # Try param= first (earthkit maps this to shortName), fallback to shortName=
-            selected_data = data_source.sel(param=parameter)
+            selected_data = data_source.sel({"parameter.variable": parameter})
             if len(selected_data) == 0:
                 selected_data = data_source.sel(shortName=parameter)
 
@@ -251,7 +251,7 @@ class MeteogramPlotting:
         """
         if hasattr(data_source, "sel"):
             def _sel_to_xarray(ds, param):
-                sel = ds.sel(param=param)
+                sel = ds.sel({"parameter.variable": param})
                 if len(sel) == 0:
                     sel = ds.sel(shortName=param)
                 try:
@@ -349,7 +349,7 @@ class MeteogramPlotting:
             return self._extract_nearest_gridpoint(xr_data, lat, lon)
 
         # Select parameter from FieldList
-        selected = data_source.sel(param=parameter)
+        selected = data_source.sel({"parameter.variable": parameter})
         if len(selected) == 0:
             selected = data_source.sel(shortName=parameter)
         if len(selected) == 0:

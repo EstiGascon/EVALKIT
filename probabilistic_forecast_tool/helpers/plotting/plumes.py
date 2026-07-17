@@ -512,7 +512,7 @@ class PlumesPlotting:
                 return data.sel(shortName=parameter)
             except:  # noqa: E722
                 try:
-                    return data.sel(param=parameter)
+                    return data.sel({"parameter.variable": parameter})
                 except:  # noqa: E722
                     return data
 
@@ -536,7 +536,7 @@ class PlumesPlotting:
 
         if hasattr(data_source, "sel"):
             def _sel_to_xarray(ds, param):
-                sel = ds.sel(param=param)
+                sel = ds.sel({"parameter.variable": param})
                 try:
                     return sel.to_xarray()
                 except NotImplementedError:
@@ -602,7 +602,7 @@ class PlumesPlotting:
             return np.squeeze(point.values) if hasattr(point, "values") else np.squeeze(point)
 
         # Select parameter from FieldList
-        selected = data_source.sel(param=parameter)
+        selected = data_source.sel({"parameter.variable": parameter})
         if len(selected) == 0:
             selected = data_source.sel(shortName=parameter)
         if len(selected) == 0:
@@ -637,7 +637,7 @@ class PlumesPlotting:
         # Find nearest gridpoint index from the first field
         first_field = selected[0]
         idx, _ = nearest_point_haversine(
-            [lat, lon], (first_field.geography.latitudes(), first_field.geography.longitudes())
+            [lat, lon], (first_field.geography.latitudes().flatten(), first_field.geography.longitudes().flatten())
         )
 
         # Collect (step, number) → value for every field
