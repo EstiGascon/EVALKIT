@@ -343,12 +343,14 @@ class WeatherMapHandler:
             lat, lon = info["latitude"], info["longitude"]
 
             if not selected:
-                # Restore a grey unselected marker so the station stays visible
+                # Restore an unselected marker coloured by the station's current
+                # observation value at the active lead-time index.
+                obs_color = self._get_current_obs_color(station_id, lat, lon)
                 grey_marker = ipyleaflet.CircleMarker(
                     location=(lat, lon),
                     radius=5,
-                    color="#949190",
-                    fill_color="#949190",
+                    color=obs_color,
+                    fill_color=obs_color,
                     fill_opacity=0.85,
                     opacity=1.0,
                     weight=1,
@@ -376,6 +378,48 @@ class WeatherMapHandler:
 
         except Exception as e:
             print(f" Error updating marker color: {e}")
+
+    def _get_current_obs_color(self, station_id, lat, lon):
+        """Return the heatmap colour for *station_id* at the active lead-time.
+
+        Falls back to grey (#949190) if the timeseries or value is unavailable.
+        """
+        try:
+            obs_handler = getattr(
+                getattr(getattr(self.ui, "callbacks", None), "observation_handler", None),
+                None, None
+            )
+            # Access via callbacks directly
+            callbacks = getattr(self.ui, "callbacks", None)
+            if callbacks is None:
+                return "#949190"
+            obs_handler = getattr(callbacks, "observation_handler", None)
+            if obs_handler is None:
+                return "#949190"
+
+            time_index = getattr(callbacks, "_obs_time_index", 0)
+            row, _ = obs_handler._get_time_values(time_index)
+            if row is None or row.empty:
+                return "#949190"
+
+            import numpy as np
+            import pandas as pd
+            val = row.get(station_id, np.nan)
+            if pd.isna(val):
+                return "#949190"
+
+            # Compute colour range from all visible stations
+            from helpers.widgets.callbacks.callbacks_observation_handler import ObservationHandler
+            valid = row.replace([np.inf, -np.inf], np.nan).dropna()
+            visible_ids = list(self.observation_markers.keys())
+            visible = valid.reindex(visible_ids).dropna()
+            scale = visible if not visible.empty else valid
+            if scale.empty:
+                return "#949190"
+            vmin, vmax = float(scale.min()), float(scale.max())
+            return ObservationHandler._value_to_hex(float(val), vmin, vmax)
+        except Exception:
+            return "#949190"
 
     def _remove_unified_point(self, point_id):
         """Remove a point (forecast or observation) from the map."""
