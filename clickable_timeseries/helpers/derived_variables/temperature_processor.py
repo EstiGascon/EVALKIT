@@ -1,9 +1,9 @@
-import math
 import traceback
 from typing import Any
 
 import numpy as np
 import pandas as pd
+from earthkit.geo.distance import nearest_point_haversine
 
 
 class TemperatureProcessor:
@@ -125,6 +125,12 @@ class TemperatureProcessor:
             if len(temp_fields) == 0:
                 return None
 
+            # Extract lat/lon arrays once from the fields (shared grid). This works
+            # for any grid type (regular or reduced Gaussian), unlike a manual
+            # Ni/Nj bounding-box reconstruction.
+            grid_lat = temp_fields.geography.latitudes().flatten()
+            grid_lon = temp_fields.geography.longitudes().flatten()
+
             temp_records = []
 
             for temp_field in temp_fields:
@@ -132,12 +138,10 @@ class TemperatureProcessor:
                     temp_values = temp_field.values
 
                     time_info = self._extract_time_info(temp_field)
-                    coord_info = self._extract_coordinate_info(temp_field)
 
                     record = {
                         "values": temp_values,
                         "time": time_info,
-                        "coordinates": coord_info,
                         "metadata": {
                             "param": temp_param,
                             "shortName": temp_param,
@@ -159,6 +163,8 @@ class TemperatureProcessor:
                     "records": temp_records,
                     "model": model_name,
                     "param": temp_param,
+                    "grid_lat": grid_lat,
+                    "grid_lon": grid_lon,
                 }
             else:
                 return None
@@ -177,80 +183,24 @@ class TemperatureProcessor:
             Dictionary with time-related keys and their values (may include step, valid_time, etc.).
 
         """
-        try:
-            metadata = field.metadata()
-            time_info = {}
+        time_info = {}
+        time_keys = [
+            "valid_time",
+            "validityTime",
+            "time",
+            "dataTime",
+            "step",
+            "forecastTime",
+        ]
+        for key in time_keys:
+            try:
+                value = field.metadata(key)
+            except Exception:
+                value = None
+            if value is not None:
+                time_info[key] = value
 
-            def get_metadata_value(meta, key):
-                if hasattr(meta, "get"):
-                    return meta.get(key)
-                try:
-                    return meta(key)
-                except Exception:
-                    return None
-
-            time_keys = [
-                "valid_time",
-                "validityTime",
-                "time",
-                "dataTime",
-                "step",
-                "forecastTime",
-            ]
-            for key in time_keys:
-                value = get_metadata_value(metadata, key)
-                if value is not None:
-                    time_info[key] = value
-
-            return time_info
-
-        except Exception as e:
-            print(f"Error extracting time info: {e}")
-            return {}
-
-    def _extract_coordinate_info(self, field) -> dict:
-        """Extract grid coordinate metadata from a GRIB field.
-
-        Args:
-            field: A single earthkit GRIB field.
-
-        Returns:
-            Dictionary with grid bounding-box and dimension keys expected by
-            _extract_nearest_value:
-                latitudeOfFirstGridPointInDegrees, longitudeOfFirstGridPointInDegrees,
-                latitudeOfLastGridPointInDegrees, longitudeOfLastGridPointInDegrees,
-                Ni, Nj.
-            Returns an empty dict on failure so callers can fall back gracefully.
-        """
-        try:
-            metadata = field.metadata()
-
-            def _get(key):
-                if hasattr(metadata, "get"):
-                    return metadata.get(key)
-                try:
-                    return metadata(key)
-                except Exception:
-                    return None
-
-            coord_info = {}
-            for key in [
-                "latitudeOfFirstGridPointInDegrees",
-                "longitudeOfFirstGridPointInDegrees",
-                "latitudeOfLastGridPointInDegrees",
-                "longitudeOfLastGridPointInDegrees",
-                "Ni",
-                "Nj",
-            ]:
-                val = _get(key)
-                if val is not None:
-                    coord_info[key] = val
-
-            return coord_info
-
-        except Exception as e:
-            print(f"Error extracting coordinate info: {e}")
-            return {}
+        return time_info
 
     def _calculate_daily_extremes(  # noqa: PLR0912, PLR0915
         self, temp_data, model_name: str, temp_param: str, extreme_type: str
@@ -366,7 +316,6 @@ class TemperatureProcessor:
                 extreme_record = {
                     "values": extreme_values,
                     "time": extreme_time,
-                    "coordinates": representative_record["coordinates"],
                     "metadata": {
                         "param": f"{temp_param}_24h_{extreme_type}",
                         "shortName": f"{temp_param}_{extreme_type}",
@@ -385,6 +334,8 @@ class TemperatureProcessor:
                     "model": model_name,
                     "param": f"{temp_param}_24h_{extreme_type}",
                     "aggregation": f"24h_{extreme_type}",
+                    "grid_lat": temp_data.get("grid_lat"),
+                    "grid_lon": temp_data.get("grid_lon"),
                 }
             else:
                 return None
@@ -496,7 +447,7 @@ class TemperatureProcessor:
         base_param: str,
         interval: str = "hourly",
     ) -> tuple[pd.DataFrame, float]:
-        """Extract temperature timeseries at a specific location using simple nearest-grid approach.
+        """Extract temperature timeseries at a specific location using nearest-grid-point lookup.
 
         Args:
             model_name: Name of the model
@@ -508,7 +459,7 @@ class TemperatureProcessor:
         Returns:
             Tuple containing:
                 - Pandas DataFrame with index 'time' and column 'forecast_value', or None if no data
-                - Average distance in kilometers from target location to the nearest grid points
+                - Distance in kilometers from target location to the nearest grid point
                 used for extraction (0.0 if no data)
 
         """
@@ -523,26 +474,32 @@ class TemperatureProcessor:
                 return None, 0.0
 
             temp_data = self.processed_datasets[dataset_key]
+            grid_lat = temp_data.get("grid_lat")
+            grid_lon = temp_data.get("grid_lon")
+
+            if grid_lat is None or grid_lon is None:
+                print(f"No grid coordinates for {dataset_key}")
+                return None, 0.0
+
+            # Find nearest grid point once (same grid for all records)
+            coord = [lat, lon]
+            idx, distance = nearest_point_haversine(coord, (grid_lat, grid_lon))
+            distance_km = distance[0] / 1000.0
 
             timeseries_data = []
 
             for record in temp_data["records"]:
                 try:
                     values = record["values"]
-                    coordinates = record["coordinates"]
                     time_info = record["time"]
 
-                    value_at_location, distance = self._extract_nearest_value(
-                        values, coordinates, lat, lon
-                    )
-
+                    value_at_location = float(values[idx])
                     time_index = self._create_time_index(time_info)
 
                     timeseries_data.append(
                         {
                             "time": time_index,
                             "forecast_value": value_at_location,
-                            "distance_km": distance,
                         }
                     )
 
@@ -555,142 +512,13 @@ class TemperatureProcessor:
                 df.set_index("time", inplace=True)
                 df.sort_index(inplace=True)
 
-                avg_distance = np.mean([d["distance_km"] for d in timeseries_data])
-                return df[["forecast_value"]], avg_distance
+                return df[["forecast_value"]], distance_km
             else:
                 return None, 0.0
 
         except Exception as e:
             print(f"Error extracting temperature timeseries: {e}")
             return None, 0.0
-
-    def _extract_nearest_value(self, values, coordinates, target_lat, target_lon):
-        """Extract the value at the nearest grid point to a target location.
-
-        Performs a simple nearest-grid-point extraction using the grid metadata.
-        Falls back to the center value if coordinates are missing or an error occurs.
-
-        Args:
-            values: Numpy array or similar containing the grid values
-            coordinates: Dictionary with grid metadata including:
-                - 'latitudeOfFirstGridPointInDegrees'
-                - 'longitudeOfFirstGridPointInDegrees'
-                - 'latitudeOfLastGridPointInDegrees'
-                - 'longitudeOfLastGridPointInDegrees'
-                - 'Ni': number of points in longitude direction
-                - 'Nj': number of points in latitude direction
-            target_lat: Latitude of target location
-            target_lon: Longitude of target location
-
-        Returns:
-            Tuple containing:
-                extracted_value: Float value at nearest grid point (or center fallback)
-                distance_km: Distance in kilometers from target location to extracted point
-                            (0.0 if fallback was used or error occurred)
-
-        """
-        try:
-            lat_first = coordinates.get("latitudeOfFirstGridPointInDegrees")
-            lon_first = coordinates.get("longitudeOfFirstGridPointInDegrees")
-            lat_last = coordinates.get("latitudeOfLastGridPointInDegrees")
-            lon_last = coordinates.get("longitudeOfLastGridPointInDegrees")
-            ni = coordinates.get("Ni")
-            nj = coordinates.get("Nj")
-
-            grid_available = (
-                lat_first is not None
-                and lon_first is not None
-                and lat_last is not None
-                and lon_last is not None
-                and ni
-                and nj
-            )
-
-            if grid_available:
-                try:
-                    lat_step = (lat_last - lat_first) / (nj - 1) if nj > 1 else 0
-                    lon_step = (lon_last - lon_first) / (ni - 1) if ni > 1 else 0
-
-                    lat_idx = (
-                        int(round((target_lat - lat_first) / lat_step))
-                        if lat_step != 0
-                        else 0
-                    )
-                    lat_idx = max(0, min(lat_idx, nj - 1))
-                    lon_idx = (
-                        int(round((target_lon - lon_first) / lon_step))
-                        if lon_step != 0
-                        else 0
-                    )
-                    lon_idx = max(0, min(lon_idx, ni - 1))
-
-                    if len(values.shape) == 1:
-                        combined_idx = lat_idx * ni + lon_idx
-                        combined_idx = max(0, min(combined_idx, len(values) - 1))
-                        extracted_value = float(values[combined_idx])
-                    else:
-                        extracted_value = float(values[lat_idx, lon_idx])
-
-                    actual_lat = lat_first + lat_idx * lat_step
-                    actual_lon = lon_first + lon_idx * lon_step
-                    distance_km = self._calculate_distance(
-                        target_lat, target_lon, actual_lat, actual_lon
-                    )
-                    return extracted_value, distance_km
-                except Exception as grid_error:
-                    print(f"Grid interpolation failed: {grid_error}, using fallback")
-
-            if len(values.shape) == 1:
-                middle_idx = len(values) // 2
-                return float(values[middle_idx]), 0.0
-            else:
-                middle_i = values.shape[0] // 2
-                middle_j = values.shape[1] // 2
-                return float(values[middle_i, middle_j]), 0.0
-
-        except Exception as e:
-            print(f"Error extracting nearest value: {e}")
-            if len(values.shape) == 1:
-                middle_idx = len(values) // 2
-                return float(values[middle_idx]), 0.0
-            else:
-                middle_i = values.shape[0] // 2
-                middle_j = values.shape[1] // 2
-                return float(values[middle_i, middle_j]), 0.0
-
-    def _calculate_distance(self, lat1, lon1, lat2, lon2):
-        """Calculate the great-circle distance between two geographic points.
-
-        Args:
-            lat1: Latitude of the first point in degrees
-            lon1: Longitude of the first point in degrees
-            lat2: Latitude of the second point in degrees
-            lon2: Longitude of the second point in degrees
-
-        Returns:
-            Distance between the two points in kilometers. Returns 0.0 if an error occurs.
-
-        """
-        try:
-            lat1_rad = math.radians(lat1)
-            lon1_rad = math.radians(lon1)
-            lat2_rad = math.radians(lat2)
-            lon2_rad = math.radians(lon2)
-
-            dlat = lat2_rad - lat1_rad
-            dlon = lon2_rad - lon1_rad
-            a = (
-                math.sin(dlat / 2) ** 2
-                + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
-            )
-            c = 2 * math.asin(math.sqrt(a))
-            distance_km = 6371 * c
-
-            return distance_km
-
-        except Exception as e:
-            print(f"Error calculating distance: {e}")
-            return 0.0
 
     def _create_time_index(self, time_info):
         """Create a pandas Timestamp or DatetimeIndex from provided time information.

@@ -247,9 +247,11 @@ def _extract_base_datetime(data_ds: Any, xr_ds: Any = None) -> tuple[Any, Any]: 
             if hasattr(data_ds, "__getitem__") and len(data_ds) > 0:
                 first_field = data_ds[0]
                 if hasattr(first_field, "metadata"):
-                    metadata = first_field.metadata()
-                    date = metadata.get("date")
-                    time = metadata.get("time")
+                    try:
+                        date = first_field.metadata("date")
+                        time = first_field.metadata("time")
+                    except Exception:
+                        date, time = None, None
                     if date is not None and time is not None:
                         print(
                             f"Found base datetime from earthkit metadata: {date} {time}"

@@ -1,3 +1,7 @@
+import contextlib
+import html
+import io
+import sys
 import traceback
 from typing import Any
 
@@ -9,6 +13,32 @@ from helpers.derived_variables.temperature_processor import TemperatureProcessor
 from helpers.derived_variables.wind_gust_processor import WindGustProcessor
 from helpers.derived_variables.wind_speed_processor import WindSpeedProcessor
 from helpers.widgets.status_message_handler import StatusMessageHandler
+
+
+class _TeeStream:
+    """Writable stream that forwards writes to an original stream and a shared buffer.
+
+    Map-click callbacks (ipyleaflet interactions) run outside the notebook's
+    normal cell execution context, so plain print() output from them is not
+    shown in the notebook UI. This lets us capture that output in a shared
+    buffer for display in a widget, while still forwarding it to the
+    original stream (e.g. for terminal/log visibility).
+    """
+
+    def __init__(self, original, buffer):
+        """Initialize with the original stream and shared buffer to write to."""
+        self._original = original
+        self._buffer = buffer
+
+    def write(self, s):
+        """Write to both the original stream and the shared buffer."""
+        self._original.write(s)
+        self._buffer.write(s)
+        return len(s)
+
+    def flush(self):
+        """Flush the original stream."""
+        self._original.flush()
 
 
 class ParameterProcessor:
@@ -155,65 +185,78 @@ class ParameterProcessor:
                         self.callbacks.plotting_manager
                     )
 
-            if selected_param in ["tp_deaccum", "cp_deaccum", "lsp_deaccum"]:
-                base_param = selected_param.replace("_deaccum", "")
-                self._process_precipitation_deaccum_multi_points(
-                    selected_points, all_datasets, param_type=base_param
-                )
-            elif selected_param in ["tp", "cp", "lsp"]:
-                self._process_standard_multi_points(
-                    selected_points, all_datasets, selected_param
-                )
-            elif selected_param == "10ff":
-                self._process_wind_speed_multi_points(selected_points, all_datasets)
-            elif selected_param == "10ff_daily":
-                self._process_daily_wind_speed_multi_points(
-                    selected_points, all_datasets
-                )
-            elif selected_param.startswith("10fg"):
-                if selected_param == "10fg":
+            # Map-click callbacks run outside the notebook's cell execution
+            # context, so plain print() diagnostics from the processors below
+            # are normally invisible to the user. Capture them here so we can
+            # surface the real failure reason in the UI if extraction fails.
+            debug_log = io.StringIO()
+            with (
+                contextlib.redirect_stdout(_TeeStream(sys.stdout, debug_log)),
+                contextlib.redirect_stderr(_TeeStream(sys.stderr, debug_log)),
+            ):
+                if selected_param in ["tp_deaccum", "cp_deaccum", "lsp_deaccum"]:
+                    base_param = selected_param.replace("_deaccum", "")
+                    self._process_precipitation_deaccum_multi_points(
+                        selected_points, all_datasets, param_type=base_param
+                    )
+                elif selected_param in ["tp", "cp", "lsp"]:
                     self._process_standard_multi_points(
                         selected_points, all_datasets, selected_param
                     )
-                else:
-                    period = selected_param.replace("10fg_", "")
-                    self._process_wind_gust_multi_points(
-                        selected_points, all_datasets, period
+                elif selected_param == "10ff":
+                    self._process_wind_speed_multi_points(
+                        selected_points, all_datasets
                     )
-            elif selected_param in [
-                "2t_24h_max",
-                "2t_24h_min",
-                "2d_24h_max",
-                "2d_24h_min",
-            ]:
-                self._process_temperature_multi_points(
-                    selected_points, all_datasets, selected_param
-                )
-            else:
-                self._process_standard_multi_points(
-                    selected_points, all_datasets, selected_param
-                )
-
-            for point_id, point_info in selected_points.items():
-                if (
-                    point_info.get("type") == "observation"
-                    and "station_id" in point_info
-                ):
-                    station_id = point_info["station_id"]
-
-                    if point_id in self.multi_point_data:
-                        success = self.callbacks._add_observation_data(
-                            self.multi_point_data[point_id], station_id, selected_param
+                elif selected_param == "10ff_daily":
+                    self._process_daily_wind_speed_multi_points(
+                        selected_points, all_datasets
+                    )
+                elif selected_param.startswith("10fg"):
+                    if selected_param == "10fg":
+                        self._process_standard_multi_points(
+                            selected_points, all_datasets, selected_param
                         )
-                        if success:
-                            if hasattr(self.ui.widgets, "observations_checkbox"):
-                                self.ui.widgets[
-                                    "observations_checkbox"
-                                ].disabled = False
-                        else:
-                            print(
-                                f"⚠️ Could not add observation data for station {station_id}"
+                    else:
+                        period = selected_param.replace("10fg_", "")
+                        self._process_wind_gust_multi_points(
+                            selected_points, all_datasets, period
+                        )
+                elif selected_param in [
+                    "2t_24h_max",
+                    "2t_24h_min",
+                    "2d_24h_max",
+                    "2d_24h_min",
+                ]:
+                    self._process_temperature_multi_points(
+                        selected_points, all_datasets, selected_param
+                    )
+                else:
+                    self._process_standard_multi_points(
+                        selected_points, all_datasets, selected_param
+                    )
+
+                for point_id, point_info in selected_points.items():
+                    if (
+                        point_info.get("type") == "observation"
+                        and "station_id" in point_info
+                    ):
+                        station_id = point_info["station_id"]
+
+                        if point_id in self.multi_point_data:
+                            success = self.callbacks._add_observation_data(
+                                self.multi_point_data[point_id],
+                                station_id,
+                                selected_param,
                             )
+                            if success:
+                                if hasattr(self.ui.widgets, "observations_checkbox"):
+                                    self.ui.widgets[
+                                        "observations_checkbox"
+                                    ].disabled = False
+                            else:
+                                print(
+                                    f"⚠️ Could not add observation data for station {station_id}"
+                                )
 
             if self.multi_point_data:
                 self.callbacks._create_unified_plot(selected_param)
@@ -223,9 +266,19 @@ class ParameterProcessor:
                     len(selected_points),
                     "No data could be extracted for selected points",
                 )
+                message = "❌ No data could be extracted for selected points"
+                debug_text = debug_log.getvalue().strip()
+                if debug_text:
+                    message += (
+                        "<details style='margin-top:8px;'>"
+                        "<summary>Show diagnostic details</summary>"
+                        "<pre style='white-space:pre-wrap; font-size:11px; "
+                        "max-height:300px; overflow:auto;'>"
+                        f"{html.escape(debug_text)}</pre></details>"
+                    )
                 StatusMessageHandler.show_plot_info(
                     self.ui.widgets["mars_info_display"],
-                    "❌ No data could be extracted for selected points",
+                    message,
                 )
 
         except Exception as e:

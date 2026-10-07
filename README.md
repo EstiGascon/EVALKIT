@@ -20,13 +20,21 @@ Ensemble forecast visualization and uncertainty quantification tools:
 - **CDFs (Cumulative Distribution Functions)**: Probability distribution analysis for specific forecast times and variables
 - **Stamps**: Small-multiple displays showing spatial patterns across individual ensemble members
 
+### 🔬 Verification Pipelines & Case Studies
+Command-line scripts in [`analysis/`](analysis/) that verify forecasts against SYNOP/HDOBS observations and produce case-study figures. They compare IFS-control, AIFS-single, DestinE (`iekm`) and the Pilot DT (`j5j2`) at native resolution. Current scripts:
+- **Wind verification:** HRES 10 m wind speed (RTE France case)
+- **Precipitation misplacement:** Baltic 24 h precipitation study
+- **Case studies** in [`analysis/case_studies/`](analysis/case_studies/): Alps, Catalonia and Crete precipitation, plus Crete orography with wind
+
+See [analysis/README.md](analysis/README.md).
+
 ## 🚀 Getting Started
 See [GETTING_STARTED.md](GETTING_STARTED.md) for environment setup instructions.
 
-## � User Guide
-For a complete walkthrough of all three tools (with screenshots and configuration examples), see [USER_GUIDE.md](USER_GUIDE.md).
+## 📖 User Guide
+For a complete walkthrough of all three tools and the analysis scripts (with screenshots and configuration examples), see [USER_GUIDE.md](USER_GUIDE.md).
 
-## �🛠️ Contributing  
+## 🛠️ Contributing  
 We welcome contributions! Please review our guidelines in [CONTRIBUTING.md](CONTRIBUTING.md) for details on:  
 - Setting up the development environment  
 - Submitting pull requests  

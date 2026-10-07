@@ -8,7 +8,9 @@
 | ⏱️ **Clickable Timeseries** | Interactive point-and-click time-series comparison across models and observations | [clickable_timeseries/notebooks/timeseries_analysis.ipynb](clickable_timeseries/notebooks/timeseries_analysis.ipynb) |
 | 📊 **Probabilistic Forecast Tool** | Ensemble forecast visualization: meteograms, plumes, stamps, and CDFs | [probabilistic_forecast_tool/notebooks/probabilistic_forecast_tool.ipynb](probabilistic_forecast_tool/notebooks/probabilistic_forecast_tool.ipynb) |
 
-This guide consolidates the usage instructions from all three notebooks into a single reference, along with setup and customization information. For a quick description of each tool, see the [README](README.md).
+This guide brings together the usage instructions from all three notebooks, plus setup and customization information. For a quick description of each tool, see the [README](README.md).
+
+Alongside the notebooks, the [`analysis/`](analysis/) folder contains command-line verification pipelines and case-study scripts that produce static figures and tables. See [Analysis Scripts and Case Studies](#-analysis-scripts-and-case-studies).
 
 ## Table of Contents
 
@@ -16,9 +18,10 @@ This guide consolidates the usage instructions from all three notebooks into a s
 2. [Dynamic Maps](#-dynamic-maps)
 3. [Clickable Timeseries](#-clickable-timeseries)
 4. [Probabilistic Forecast Tool](#-probabilistic-forecast-tool)
-5. [Customization and Extensibility](#customization-and-extensibility)
-6. [Tips for Best Results](#tips-for-best-results)
-7. [Getting Help / Contributing](#getting-help--contributing)
+5. [Analysis Scripts and Case Studies](#-analysis-scripts-and-case-studies)
+6. [Customization and Extensibility](#customization-and-extensibility)
+7. [Tips for Best Results](#tips-for-best-results)
+8. [Getting Help / Contributing](#getting-help--contributing)
 
 ---
 
@@ -138,21 +141,41 @@ The interface consists of a **Configuration Panel** (Data Source, Parameter & An
 
 **Option A: Download from MARS Archive**
 1. Select **"Download from MARS Archive"**.
-2. Choose your model from the dropdown.
-3. Set the time period using the date pickers and time selection.
+2. Select one or more models in the **Models** list:
+
+   | Model | MARS | Steps |
+   |---|---|---|
+   | **IFS Operational** | `od` | IFS variable step pattern |
+   | **AIFS Control** | `ai` | 6-hourly |
+   | **IFS 4.4km** | `rd` / `iekm` | hourly up to 120 h |
+   | **Hybrid IFS** | `rd` / `iueu` | 3-hourly up to 240 h |
+   | **RD Experiment** | user-defined | IFS variable step pattern |
+
+   When **RD Experiment** is selected, two extra fields appear: **Class** (default `rd`) and **Exp. version** (e.g. `iekm`). Use them to retrieve any research experiment.
+3. Set the forecast initialisation date, end date and run time.
 4. Define the geographic area by drawing a bounding box on the map or entering coordinates manually.
 5. Set grid resolution if needed.
 6. Click **"Preview"** to review, then **"Retrieve Data"**.
 
 **Option B: Load Local Files**
 1. Select **"Load Local File(s)"**.
-2. Click **"Browse AIFS"** and/or **"Browse IFS"** to select model files, or paste in the paths of your GRIB files directly.
+2. Each configured model has its own **Browse** button and path box (**Browse IFS**, **Browse AIFS**, **Browse IFS4KM**, **Browse HYBRID**, **Browse RD**). Select files for the models you have, or paste the GRIB paths directly.
 3. Click **"Load File"** to process the selected files, and verify success in the Loading Summary panel.
 
 ### Step 2: Select Analysis Parameter
 
-1. Choose the meteorological parameter to analyze from the dropdown menu.
-2. Check the boxes for the models you want to compare (AIFS, IFS).
+1. Choose the parameter to analyze from the **Select Parameter** dropdown. As well as the retrieved fields, derived parameters are added automatically when their inputs are loaded:
+
+   | Loaded input | Derived parameters offered |
+   |---|---|
+   | `10u` + `10v` | 10m Wind Speed (calculated), Daily Mean 10m Wind Speed |
+   | `10fg` (hourly gust) | Max 6h / 12h / 24h / 48h Wind Gust (rolling maximum) |
+   | `2t` | Daily Maximum / Minimum 2m Temperature |
+   | `2d` | Daily Maximum / Minimum 2m Dewpoint Temperature |
+   | `tp`, `cp`, `lsp` | Deaccumulated precipitation, with the **Accumulated period** chosen from 6 / 12 / 24 / 48 hours |
+
+2. Choose display units where relevant: **Temperature** in °C or K, **Precipitation** in mm or m.
+3. Check the boxes for the models you want to compare. There is one checkbox per configured model, labelled with its display name. A checkbox stays visible but is disabled when no data is loaded for that model.
 
 ### Step 3: Add Observation Data (Optional)
 
@@ -163,12 +186,18 @@ The interface consists of a **Configuration Panel** (Data Source, Parameter & An
 
 **If you need to retrieve observation data:**
 1. Select **"Yes"**, then **"Retrieve new observations"**.
-2. Configure the VINO path to your `vino_getgeo` executable.
+2. Configure the VINO path to your `vino_getgeo` executable (default `/home/moz/bin/vino_getgeo`).
 3. Choose data sources (SYNOP, HDOBS, or both).
-4. Set the observation period and time range.
+4. Set the observation **Period** (6, 12 or 24 hours) for period-based parameters, plus the start and end dates. Retrieval times are chosen automatically for the parameter:
+   - Instantaneous parameters (`2t`, `2d`, `10ff`) are retrieved every 3 hours.
+   - Daily temperature extremes are 24 h values at 00 UTC. The ECMWF short names `mx2t`/`mn2t` are translated automatically to the VINO names `tmax`/`tmin`.
 5. Choose an output folder and click **"Retrieve Observations"**.
 
 Once loaded, check the **"Observations"** box to include it in your analysis.
+
+After loading, observation stations are coloured by their value, with a colour bar. Use **◀ Prev** / **Next ▶** under *Explore observation lead times* to step through the observation times.
+
+> ℹ️ Observations are **not** trimmed to the forecast window. If the observation and forecast time ranges differ, an information message shows both ranges, and each dataset is plotted over its own full period. Plotting is not blocked.
 
 ### Step 4: Select Analysis Points
 
@@ -230,7 +259,16 @@ The interface adapts based on the selected plot type.
 
 ![Meteogram configuration](probabilistic_forecast_tool/notebooks/assets/img/meteogram_config.png)
 
-1. **Model Class**, **Forecast Initialization Date**, and **Forecast run time**.
+1. **Model Class**, **Forecast Initialization Date**, and **Forecast run time**. Available model classes:
+
+   | Model | MARS | Notes |
+   |---|---|---|
+   | **IFS-ENS** | `od` / `1` | deterministic, control + 50 perturbed members, climate (hindcast) data for CDF |
+   | **AIFS-ENS** | `ai` / `0001` | deterministic (AIFS-single), control + 50 perturbed members |
+   | **AIFS-Single** | `ai` / `0001` | deterministic only |
+   | **IFS 4.4km** | `rd` / `iekm` | deterministic only |
+   | **Custom Experiment** | `rd` / user-defined | deterministic, control + 50 perturbed members; set your own `expver` |
+
 2. **Grid Resolution** (leave empty for reduced Gaussian grid).
 3. **Forecast Steps** (e.g. `0-24`), reviewed in the scrollable "Available Steps" list, with **Select All**/**Deselect All** helpers.
 4. **Parameter Selection** from the scrollable list.
@@ -331,6 +369,34 @@ Select a **Parameter**, then click on the map (or enter Lat/Lon) to select one a
 
 ---
 
+## 🔬 Analysis Scripts and Case Studies
+
+The [`analysis/`](analysis/) folder holds command-line scripts for forecast verification and case studies. They run on an ECMWF Python with `earthkit-data`, `cartopy` and `shapely` (e.g. `/usr/local/apps/python3/3.13.13-01/bin/python3`), and need MARS access and `vino_getgeo` for observations. Retrievals are cached under `analysis/data/`. Figures go to `analysis/figures/` and tables to `analysis/results/`.
+
+| Script | Purpose |
+|---|---|
+| `analysis/run_analysis.py` | HRES 10 m wind-speed verification against SYNOP (RTE France case, Aug 2026) |
+| `analysis/europe_map.py` | Europe-wide 10 m wind-speed bias maps |
+| `analysis/drilldown.py` | Worst stations / misses on the 15 Aug 2026 wind event |
+| `analysis/precip_run.py [--variant iekm]` | Baltic 24 h precipitation misplacement: event, fixed-lead (T+54 h) and predictability comparison of IFS-control, AIFS-single and Hybrid (j1l8) or DestinE (iekm) |
+| `analysis/case_studies/alps_precip.py` | Alps 3-day T+24 h precipitation vs SYNOP + HDOBS gauges |
+| `analysis/case_studies/catalonia_precip.py` | Catalonia MCS, 24 h precipitation (03 Oct 12 UTC → 04 Oct 12 UTC 2026) at T+60 h and T+36 h |
+| `analysis/case_studies/crete_precip.py` | Crete, 5-day (T+0–120 h) precipitation, plotted per native grid box, plus observed 5-day SYNOP + HDOBS station totals |
+| `analysis/case_studies/crete_orography.py` | Crete, model orography with 10 m wind barbs at T+24 h |
+
+The case studies compare **IFS-control** (`od/0001`), **AIFS-single** (`ai/0001`), **DestinE** (`rd/iekm`) and the **Pilot DT** (`rd/j5j2`) at each model's native resolution. Lead times always refer to the **end** of the accumulation window. Example:
+
+```bash
+python analysis/case_studies/crete_precip.py          # uses cached data if present
+python analysis/case_studies/crete_precip.py --force  # re-retrieve from MARS / STVL
+```
+
+New one-off case studies belong in `analysis/case_studies/`. See [analysis/README.md](analysis/README.md) for each script's details, outputs and conventions.
+
+> ⚠️ HDOBS observations are for ECMWF internal use only. Do not distribute figures or tables derived from them outside ECMWF.
+
+---
+
 ## Customization and Extensibility
 
 All three tools are designed to be **scalable and customizable** — you can extend them to support additional weather models and parameters by editing their configuration files. Each tool has its own copy of these files:
@@ -340,6 +406,9 @@ All three tools are designed to be **scalable and customizable** — you can ext
 | Dynamic Maps | `dynamic_maps/helpers/config.json` | `dynamic_maps/helpers/styling_config.py` |
 | Clickable Timeseries | `clickable_timeseries/helpers/config.json` | `clickable_timeseries/helpers/plotting/styling_config.py` |
 | Probabilistic Forecast Tool | `probabilistic_forecast_tool/helpers/model_config.json` | `probabilistic_forecast_tool/helpers/styling_config.py` |
+| Analysis pipelines | `analysis/config.py` (wind), `analysis/precip_config.py` (Baltic precip) | per-script colour levels |
+
+Case-study scripts in `analysis/case_studies/` keep their settings (dates, area, models, colour levels) as constants at the top of each file.
 
 ### Adding a New Model
 
@@ -409,7 +478,8 @@ self.new_category_levels = [0, 10, 20, 30, 40, 50]
 - Start with smaller geographic areas and shorter time periods for initial exploration.
 - Always preview/validate your configuration before retrieving large datasets from MARS.
 - Draw bounding boxes directly on the map for precise geographic area selection.
-- When using observations, make sure the time period matches your forecast data — the tools will warn you if observation and forecast parameters don't match.
+- When using observations, check that their period overlaps your forecast. Both datasets are always plotted over their full available periods, and an information message shows the two ranges when they differ.
+- Use the observation **Period** that matches the derived forecast parameter, e.g. 24 h observations with the 24 h deaccumulated precipitation or Max 24h Wind Gust.
 - In the Probabilistic Forecast Tool, switching between Meteogram and Plumes (or reusing a Stamps/CDF configuration) preserves your data and configuration, since they share the same underlying inputs.
 
 ## Getting Help / Contributing

@@ -55,3 +55,4 @@ ruff format
 
 - Update dependencies using `poetry add` or `poetry add --group dev package-name`.
 - If you change dependencies, run `poetry lock` and commit the updated `poetry.lock` file.
+- Put new one-off analysis or case-study scripts in `analysis/case_studies/`, not directly in `analysis/`. Reusable pipeline modules stay in `analysis/`. Generated data, figures and tables go to `analysis/data/`, `analysis/figures/` and `analysis/results/`.

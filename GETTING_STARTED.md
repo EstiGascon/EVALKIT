@@ -78,3 +78,14 @@ jupyter lab
 - `clickable_timeseries/notebooks/timeseries_analysis.ipynb`
 - `dynamic_maps/notebooks/dynamic_map.ipynb`
 - `probabilistic_forecast_tool/notebooks/probabilistic_forecast_tool.ipynb`
+
+## 6. Running the Analysis Scripts (ECMWF systems)
+
+The scripts in `analysis/` need MARS access and, for observations, the STVL `vino_getgeo` executable. Run them with an ECMWF Python that provides `earthkit-data`, `cartopy` and `shapely`:
+```sh
+PY=/usr/local/apps/python3/3.13.13-01/bin/python3
+$PY analysis/case_studies/crete_precip.py     # case studies run from any directory
+cd analysis && $PY run_analysis.py --dry-run  # pipelines run from inside analysis/
+```
+See [analysis/README.md](analysis/README.md) for all scripts and options.
+- `probabilistic_forecast_tool/notebooks/probabilistic_forecast_tool.ipynb`

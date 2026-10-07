@@ -158,36 +158,24 @@ class WindSpeedProcessor:
             dict: Dictionary of extracted time metadata fields.
 
         """
-        try:
-            metadata = field.metadata()
-            time_info = {}
+        time_info = {}
+        time_keys = [
+            "valid_time",
+            "validityTime",
+            "time",
+            "dataTime",
+            "step",
+            "forecastTime",
+        ]
+        for key in time_keys:
+            try:
+                value = field.metadata(key)
+            except Exception:
+                value = None
+            if value is not None:
+                time_info[key] = value
 
-            def get_metadata_value(meta, key):
-                if hasattr(meta, "get"):
-                    return meta.get(key)
-                try:
-                    return meta(key)
-                except Exception:
-                    return None
-
-            time_keys = [
-                "valid_time",
-                "validityTime",
-                "time",
-                "dataTime",
-                "step",
-                "forecastTime",
-            ]
-            for key in time_keys:
-                value = get_metadata_value(metadata, key)
-                if value is not None:
-                    time_info[key] = value
-
-            return time_info
-
-        except Exception as e:
-            print(f"Error extracting time info: {e}")
-            return {}
+        return time_info
 
     def _calculate_daily_means(self, wind_speed_data, model_name: str):
         """Compute daily mean wind speed from hourly wind speed records.
