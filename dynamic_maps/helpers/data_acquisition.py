@@ -335,6 +335,7 @@ class MarsArchiveDataRetriever:
                 # which does not support SQLite POSIX file locking. Use /tmp (local
                 # tmpfs) to avoid "unable to open database file" errors.
                 import os as _os
+
                 _orig_tmpdir = _os.environ.get("TMPDIR")
                 _mars_tmp = f"/tmp/mars_tmp_{_os.environ.get('USER', 'evalkit')}"
                 _os.makedirs(_mars_tmp, exist_ok=True)
@@ -482,6 +483,7 @@ class MarsArchiveDataRetriever:
             # which does not support SQLite POSIX file locking. Use /tmp (local
             # tmpfs) to avoid "unable to open database file" errors.
             import os as _os
+
             _orig_tmpdir = _os.environ.get("TMPDIR")
             _mars_tmp = f"/tmp/mars_tmp_{_os.environ.get('USER', 'evalkit')}"
             _os.makedirs(_mars_tmp, exist_ok=True)
@@ -599,7 +601,7 @@ class MarsArchiveDataRetriever:
 
         try:
             ds = ek.from_source("file", file_path).to("fieldlist")
-            ds = ds.new_mask_index(where=lambda f: f.metadata('step') != 0)
+            ds = ds.new_mask_index(where=lambda f: f.metadata("step") != 0)
             return ds
 
         except Exception as e:

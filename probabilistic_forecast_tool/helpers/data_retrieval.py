@@ -359,7 +359,9 @@ class EnsembleDataRetriever:
                 custom_expver=custom_expver,
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to retrieve deterministic forecast (FC): {e}") from e
+            raise RuntimeError(
+                f"Failed to retrieve deterministic forecast (FC): {e}"
+            ) from e
 
         if include_cf:
             try:
@@ -380,7 +382,9 @@ class EnsembleDataRetriever:
                     custom_expver=custom_expver,
                 )
             except Exception as e:
-                raise RuntimeError(f"Failed to retrieve control forecast (CF): {e}") from e
+                raise RuntimeError(
+                    f"Failed to retrieve control forecast (CF): {e}"
+                ) from e
 
         try:
             print("Retrieving perturbed forecast ensemble (PF, ENFO stream)...")
@@ -401,7 +405,9 @@ class EnsembleDataRetriever:
                 custom_expver=custom_expver,
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to retrieve perturbed forecast ensemble (PF): {e}") from e
+            raise RuntimeError(
+                f"Failed to retrieve perturbed forecast ensemble (PF): {e}"
+            ) from e
 
         if use_bbox and self.bbox_manager:
             results["bbox_info"] = self.bbox_manager.get_current_bbox_params()
@@ -480,7 +486,9 @@ class EnsembleDataRetriever:
 
             _display = _model_cfg.get("display_name", model_class.upper())
             try:
-                print(f"Retrieving {_display} deterministic forecast (FC, OPER stream)...")
+                print(
+                    f"Retrieving {_display} deterministic forecast (FC, OPER stream)..."
+                )
                 results["fc"] = self._retrieve_forecast_data(
                     model_class=model_class,
                     forecast_type="deterministic",
@@ -499,7 +507,9 @@ class EnsembleDataRetriever:
                     custom_expver=custom_expver,
                 )
             except Exception as e:
-                raise RuntimeError(f"Failed to retrieve {_display} deterministic forecast (FC): {e}") from e
+                raise RuntimeError(
+                    f"Failed to retrieve {_display} deterministic forecast (FC): {e}"
+                ) from e
 
             if use_bbox and self.bbox_manager:
                 results["bbox_info"] = self.bbox_manager.get_current_bbox_params()
@@ -535,7 +545,9 @@ class EnsembleDataRetriever:
                 custom_expver=custom_expver,
             )
         except Exception as e:
-            raise RuntimeError(f"Failed to retrieve perturbed forecast ensemble (PF): {e}") from e
+            raise RuntimeError(
+                f"Failed to retrieve perturbed forecast ensemble (PF): {e}"
+            ) from e
 
         if include_cf:
             try:
@@ -558,7 +570,9 @@ class EnsembleDataRetriever:
                     custom_expver=custom_expver,
                 )
             except Exception as e:
-                raise RuntimeError(f"Failed to retrieve control forecast (CF): {e}") from e
+                raise RuntimeError(
+                    f"Failed to retrieve control forecast (CF): {e}"
+                ) from e
 
         if use_bbox and self.bbox_manager:
             results["bbox_info"] = self.bbox_manager.get_current_bbox_params()
@@ -932,8 +946,8 @@ class EnsembleDataRetriever:
             for ftype in ("deterministic", "probabilistic"):
                 if ftype in model_config:
                     updated = {}
-                    for fname, fcfg in model_config[ftype].items():
-                        fcfg = dict(fcfg)
+                    for fname, base_cfg in model_config[ftype].items():
+                        fcfg = dict(base_cfg)
                         if custom_expver:
                             fcfg["expver"] = custom_expver
                         updated[fname] = fcfg
@@ -1016,7 +1030,9 @@ class EnsembleDataRetriever:
                             expect_any,
                         )
                         if "dataset" in results:
-                            results["dataset"] = results["dataset"] + single_result["dataset"]
+                            results["dataset"] = (
+                                results["dataset"] + single_result["dataset"]
+                            )
                         else:
                             results.update(single_result)
                         successful_params.append(param)
@@ -1051,11 +1067,15 @@ class EnsembleDataRetriever:
                         expect_any,
                     )
                     if "dataset" in results:
-                        results["dataset"] = results["dataset"] + pressure_result["dataset"]
+                        results["dataset"] = (
+                            results["dataset"] + pressure_result["dataset"]
+                        )
                     else:
                         results.update(pressure_result)
                 except RuntimeError as e:
-                    print(f"⚠️  Skipping pressure-level param '{param}' at {levels} hPa: {e}")
+                    print(
+                        f"⚠️  Skipping pressure-level param '{param}' at {levels} hPa: {e}"
+                    )
 
         results["metadata"] = {
             "model_class": model_class,
@@ -1086,7 +1106,11 @@ class EnsembleDataRetriever:
         if "dataset" in results and forecast_config["type"] != "cd":
             try:
                 dataset_type = type(results["dataset"]).__name__
-                if "Reader" in dataset_type or "Simple" in dataset_type or "Multi" in dataset_type:
+                if (
+                    "Reader" in dataset_type
+                    or "Simple" in dataset_type
+                    or "Multi" in dataset_type
+                ):
                     field_list = list(results["dataset"])
                     results["dataset"] = FieldList.from_fields(field_list)
                 if calculate_windspeed:
@@ -1159,7 +1183,9 @@ class EnsembleDataRetriever:
         try:
             import pyfdb  # type: ignore
         except ImportError:
-            raise RuntimeError("[pyfdb] pyfdb not installed — FDB direct access unavailable")
+            raise RuntimeError(
+                "[pyfdb] pyfdb not installed — FDB direct access unavailable"
+            )
 
         # FDB does not understand MARS post-processing directives.
         _SKIP_KEYS = {"area", "grid", "expect", "target"}
@@ -1238,7 +1264,11 @@ class EnsembleDataRetriever:
             # future retrieval issues are immediately visible in the log.
             requested_steps = fdb_request.get("step")
             if isinstance(requested_steps, list) and n_fdb > 0:
-                _n_params = len(fdb_request.get("param", [1])) if isinstance(fdb_request.get("param"), list) else 1
+                _n_params = (
+                    len(fdb_request.get("param", [1]))
+                    if isinstance(fdb_request.get("param"), list)
+                    else 1
+                )
                 _n_params = max(_n_params, 1)
                 _expected_min = len(requested_steps)  # at least 1 field per step
                 _actual_steps = n_fdb // _n_params if _n_params else n_fdb
@@ -1403,12 +1433,11 @@ class EnsembleDataRetriever:
                 #   Step 1 — retry MARS with earthkit cache disabled to bypass any
                 #             stale cached empty result.
                 #   Step 2 — fall back to direct pyfdb FDB access.
-                print(
-                    "⚠️  MARS returned 0 fields — retrying without earthkit cache..."
-                )
+                print("⚠️  MARS returned 0 fields — retrying without earthkit cache...")
                 ds_nocache = None
                 try:
                     import earthkit.data as _ekd
+
                     stable_path = os.path.join(
                         _MARS_TMP,
                         f"mars_nocache_{os.getpid()}_"
@@ -1418,18 +1447,24 @@ class EnsembleDataRetriever:
                     # cleaned up when the context exits.  Save inside the context
                     # while the backing file still exists.
                     with _ekd.settings.temporary("cache-policy", "off"):
-                        ds_nocache = ek.data.from_source("mars", **request_params).to("fieldlist")
+                        ds_nocache = ek.data.from_source("mars", **request_params).to(
+                            "fieldlist"
+                        )
                         if len(ds_nocache) > 0:
                             ds_nocache.to_target(stable_path)
                     if ds_nocache is not None and len(ds_nocache) > 0:
-                        ds_stable = ek.data.from_source("file", stable_path).to("fieldlist")
-                        print(
-                            f"✅ MARS (no-cache) retrieved {len(ds_stable)} field(s)"
+                        ds_stable = ek.data.from_source("file", stable_path).to(
+                            "fieldlist"
                         )
+                        print(f"✅ MARS (no-cache) retrieved {len(ds_stable)} field(s)")
                         return {"dataset": ds_stable, "request_params": request_params}
-                    print("⚠️  MARS (no-cache) also returned 0 fields — trying pyfdb FDB fallback...")
+                    print(
+                        "⚠️  MARS (no-cache) also returned 0 fields — trying pyfdb FDB fallback..."
+                    )
                 except Exception as nocache_e:
-                    print(f"[cache-bypass] MARS retry failed: {nocache_e} — trying pyfdb...")
+                    print(
+                        f"[cache-bypass] MARS retry failed: {nocache_e} — trying pyfdb..."
+                    )
 
                 try:
                     ds_fdb = self._retrieve_via_pyfdb(request_params)
@@ -1461,7 +1496,11 @@ class EnsembleDataRetriever:
             raise RuntimeError(
                 f"MARS request failed (exit code {e.returncode}). "
                 f"Check that the requested date, parameters, and area are available."
-                + (f" MARS output: {mars_output.strip()}" if mars_output.strip() else "")
+                + (
+                    f" MARS output: {mars_output.strip()}"
+                    if mars_output.strip()
+                    else ""
+                )
             ) from e
         except Exception as e:
             print(f"Error retrieving data: {str(e)}")

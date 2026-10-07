@@ -101,7 +101,10 @@ class EnsembleCallbacks:
             if Path(self.config_file).exists():
                 with open(self.config_file) as f:
                     config_data = json.load(f)
-                vino_path = config_data.get("vino_path", config_data.get("stvl_path", "/home/moz/bin/vino_getgeo"))
+                vino_path = config_data.get(
+                    "vino_path",
+                    config_data.get("stvl_path", "/home/moz/bin/vino_getgeo"),
+                )
             else:
                 vino_path = "/home/moz/bin/vino_getgeo"
 
@@ -506,10 +509,9 @@ class EnsembleCallbacks:
 
             # Build a timestamp prefix for filenames
             ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            forecast_date = (
-                self.current_config.get("parameters", {}).get("forecast_date", "")
-                or self.current_config.get("parameters", {}).get("analysis_date", "")
-            )
+            forecast_date = self.current_config.get("parameters", {}).get(
+                "forecast_date", ""
+            ) or self.current_config.get("parameters", {}).get("analysis_date", "")
             date_str = str(forecast_date).replace("-", "") if forecast_date else ts
 
             saved_files = []
@@ -517,7 +519,9 @@ class EnsembleCallbacks:
             if plot_type in ("meteogram", "plumes"):
                 # data keys: "pf", "cf"
                 for key in ("pf", "cf"):
-                    if key in self.current_data and isinstance(self.current_data[key], dict):
+                    if key in self.current_data and isinstance(
+                        self.current_data[key], dict
+                    ):
                         ds = self.current_data[key].get("dataset")
                         if ds is not None:
                             fname = output_dir / f"{date_str}_{key}.grib"
@@ -527,7 +531,9 @@ class EnsembleCallbacks:
             elif plot_type == "stamps":
                 # data keys: "fc", "cf", "pf"
                 for key in ("fc", "cf", "pf"):
-                    if key in self.current_data and isinstance(self.current_data[key], dict):
+                    if key in self.current_data and isinstance(
+                        self.current_data[key], dict
+                    ):
                         ds = self.current_data[key].get("dataset")
                         if ds is not None:
                             fname = output_dir / f"{date_str}_{key}.grib"
@@ -536,7 +542,9 @@ class EnsembleCallbacks:
 
             elif plot_type == "cdf":
                 # data keys: "cd" and "forecast_data.scenarios"
-                if "cd" in self.current_data and isinstance(self.current_data["cd"], dict):
+                if "cd" in self.current_data and isinstance(
+                    self.current_data["cd"], dict
+                ):
                     ds = self.current_data["cd"].get("dataset")
                     if ds is not None:
                         fname = output_dir / f"{date_str}_cd.grib"
@@ -563,14 +571,13 @@ class EnsembleCallbacks:
                         section="data",
                         permanent=True,
                     )
-            else:
-                if self.ui:
-                    self.ui.show_alert_message(
-                        "No data fields found to save.",
-                        "error",
-                        section="data",
-                        permanent=True,
-                    )
+            elif self.ui:
+                self.ui.show_alert_message(
+                    "No data fields found to save.",
+                    "error",
+                    section="data",
+                    permanent=True,
+                )
 
         except Exception as e:
             traceback.print_exc()
@@ -985,7 +992,9 @@ class EnsembleCallbacks:
         """
         self.observation_handler._process_selected_observation_folder(folder_path)
 
-    def create_stamps_plot(self, parameter, step, unit_value, palette_value, precip_accumulation=None):
+    def create_stamps_plot(
+        self, parameter, step, unit_value, palette_value, precip_accumulation=None
+    ):
         """Create stamps plot.
 
         Args:
@@ -1002,7 +1011,10 @@ class EnsembleCallbacks:
 
         """
         return self.plotting_callbacks.create_stamps_plot(
-            parameter, step, unit_value, palette_value,
+            parameter,
+            step,
+            unit_value,
+            palette_value,
             precip_accumulation=precip_accumulation,
         )
 

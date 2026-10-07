@@ -741,7 +741,11 @@ class WidgetConfiguration:
         self.widgets["save_btn"] = self._create_save_button()
 
         self.widgets["action_buttons"] = widgets.HBox(
-            [self.widgets["validate_btn"], self.widgets["retrieve_btn"], self.widgets["save_btn"]],
+            [
+                self.widgets["validate_btn"],
+                self.widgets["retrieve_btn"],
+                self.widgets["save_btn"],
+            ],
             layout=widgets.Layout(justify_content="center"),
         )
 

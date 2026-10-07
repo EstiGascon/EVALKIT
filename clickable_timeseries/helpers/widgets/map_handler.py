@@ -303,9 +303,7 @@ class WeatherMapHandler:
                     "station_id": station_id,
                 }
 
-                self._update_observation_marker_color(
-                    station_id, color, selected=True
-                )
+                self._update_observation_marker_color(station_id, color, selected=True)
 
                 if (
                     hasattr(self.ui, "widgets")
@@ -335,7 +333,9 @@ class WeatherMapHandler:
                     pass
 
             # Get station location (needed for both selected and deselected)
-            gdf = getattr(getattr(self.ui, "callbacks", None), "observation_stations_gdf", None)
+            gdf = getattr(
+                getattr(self.ui, "callbacks", None), "observation_stations_gdf", None
+            )
             if gdf is None or station_id not in gdf.index:
                 return
 
@@ -386,8 +386,11 @@ class WeatherMapHandler:
         """
         try:
             obs_handler = getattr(
-                getattr(getattr(self.ui, "callbacks", None), "observation_handler", None),
-                None, None
+                getattr(
+                    getattr(self.ui, "callbacks", None), "observation_handler", None
+                ),
+                None,
+                None,
             )
             # Access via callbacks directly
             callbacks = getattr(self.ui, "callbacks", None)
@@ -404,12 +407,16 @@ class WeatherMapHandler:
 
             import numpy as np
             import pandas as pd
+
             val = row.get(station_id, np.nan)
             if pd.isna(val):
                 return "#949190"
 
             # Compute colour range from all visible stations
-            from helpers.widgets.callbacks.callbacks_observation_handler import ObservationHandler
+            from helpers.widgets.callbacks.callbacks_observation_handler import (
+                ObservationHandler,
+            )
+
             valid = row.replace([np.inf, -np.inf], np.nan).dropna()
             visible_ids = list(self.observation_markers.keys())
             visible = valid.reindex(visible_ids).dropna()

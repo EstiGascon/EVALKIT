@@ -19,7 +19,6 @@ from __future__ import annotations
 import argparse
 
 import pandas as pd
-
 import plots
 import verification as vf
 from config import StudyConfig
@@ -27,8 +26,13 @@ from forecasts import load_all_forecasts
 from observations import load_observations, retrieve_observations
 
 
-def _write_conclusion(cfg: StudyConfig, overall: pd.DataFrame, by_lead: pd.DataFrame,
-                      station: pd.DataFrame, by_day: pd.DataFrame) -> str:
+def _write_conclusion(
+    cfg: StudyConfig,
+    overall: pd.DataFrame,
+    by_lead: pd.DataFrame,
+    station: pd.DataFrame,
+    by_day: pd.DataFrame,
+) -> str:
     """Compose an automated systematic-vs-event conclusion from the scores."""
     ev = overall.loc["event"]
     base = overall.loc["baseline"]
@@ -50,36 +54,46 @@ def _write_conclusion(cfg: StudyConfig, overall: pd.DataFrame, by_lead: pd.DataF
     lines.append("# HRES 10 m wind-speed verification — automated summary\n")
     lines.append(f"Region box: N={cfg.north} W={cfg.west} S={cfg.south} E={cfg.east}")
     lines.append(f"Event days: {', '.join(str(d) for d in cfg.event_days)}\n")
-    lines.append(f"- Event-day mean bias (fc − obs): **{event_bias:+.2f} m/s** "
-                 f"(RMSE {ev['rmse']:.2f}, n={int(ev['n'])})")
-    lines.append(f"- Baseline mean bias:             **{base_bias:+.2f} m/s** "
-                 f"(RMSE {base['rmse']:.2f}, n={int(base['n'])})")
-    lines.append(f"- Stations under-forecasting on event days: {frac_under*100:.0f}%")
+    lines.append(
+        f"- Event-day mean bias (fc − obs): **{event_bias:+.2f} m/s** "
+        f"(RMSE {ev['rmse']:.2f}, n={int(ev['n'])})"
+    )
+    lines.append(
+        f"- Baseline mean bias:             **{base_bias:+.2f} m/s** "
+        f"(RMSE {base['rmse']:.2f}, n={int(base['n'])})"
+    )
+    lines.append(f"- Stations under-forecasting on event days: {frac_under * 100:.0f}%")
     lines.append(f"- Event bias negative at all lead times: {lead_all_negative}")
     if thresh is not None:
         flagged = [str(d) for d, b in day_bias.items() if b < thresh]
-        lines.append(f"- Event days beyond 2σ of baseline daily bias: "
-                     f"{', '.join(flagged) if flagged else 'none'}")
+        lines.append(
+            f"- Event days beyond 2σ of baseline daily bias: "
+            f"{', '.join(flagged) if flagged else 'none'}"
+        )
     lines.append("")
 
     # Heuristic verdict. Judge (a) whether the event-day under-forecast is
     # amplified relative to baseline, (b) whether it is spatially coherent,
     # and (c) whether it persists across lead times.
     gross_failure = event_bias < -1.0 and (event_bias - base_bias) < -0.7
-    amplified = event_bias < 1.3 * base_bias and event_bias < -0.2  # ≥30 % more negative
+    amplified = (
+        event_bias < 1.3 * base_bias and event_bias < -0.2
+    )  # ≥30 % more negative
     widespread = frac_under > 0.6
     outlier_days = []
     if thresh is not None:
         outlier_days = [str(d) for d, b in day_bias.items() if b < thresh]
 
     if gross_failure and widespread and lead_all_negative:
-        verdict = ("SYSTEMATIC model failure on the event days: a large, domain-wide "
-                   "under-forecast present across all lead times.")
+        verdict = (
+            "SYSTEMATIC model failure on the event days: a large, domain-wide "
+            "under-forecast present across all lead times."
+        )
     elif amplified and (widespread or lead_all_negative):
         verdict = (
             "PARTLY SYSTEMATIC (event amplification). HRES carries a modest but spatially "
             f"coherent LOW bias in 10 m wind that is amplified on the event days "
-            f"(event {event_bias:+.2f} vs baseline {base_bias:+.2f} m/s, {frac_under*100:.0f}% of "
+            f"(event {event_bias:+.2f} vs baseline {base_bias:+.2f} m/s, {frac_under * 100:.0f}% of "
             "stations under-forecasting, negative at every lead time). It is not a gross model "
             "failure, but a genuine recurring under-forecast of the daytime wind peaks that is "
             f"strongest on {', '.join(outlier_days) if outlier_days else 'the event days'}. "
@@ -88,9 +102,11 @@ def _write_conclusion(cfg: StudyConfig, overall: pd.DataFrame, by_lead: pd.DataF
             "large generation errors RTE reported."
         )
     else:
-        verdict = ("Likely EVENT-SPECIFIC / OUTLIERS: event-day bias is not clearly separated "
-                   "from normal forecast variability; the RTE cases look like individual "
-                   "misses rather than a systematic model error.")
+        verdict = (
+            "Likely EVENT-SPECIFIC / OUTLIERS: event-day bias is not clearly separated "
+            "from normal forecast variability; the RTE cases look like individual "
+            "misses rather than a systematic model error."
+        )
     lines.append(f"**Verdict:** {verdict}")
     text = "\n".join(lines)
 
@@ -100,11 +116,20 @@ def _write_conclusion(cfg: StudyConfig, overall: pd.DataFrame, by_lead: pd.DataF
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="HRES 10 m wind-speed verification study")
-    parser.add_argument("--skip-obs", action="store_true", help="Reuse cached observations")
+    """Parse CLI options and run the wind verification pipeline."""
+    parser = argparse.ArgumentParser(
+        description="HRES 10 m wind-speed verification study"
+    )
+    parser.add_argument(
+        "--skip-obs", action="store_true", help="Reuse cached observations"
+    )
     parser.add_argument("--skip-fc", action="store_true", help="Reuse cached forecasts")
-    parser.add_argument("--force-obs", action="store_true", help="Force STVL re-retrieval")
-    parser.add_argument("--force-fc", action="store_true", help="Force MARS re-retrieval")
+    parser.add_argument(
+        "--force-obs", action="store_true", help="Force STVL re-retrieval"
+    )
+    parser.add_argument(
+        "--force-fc", action="store_true", help="Force MARS re-retrieval"
+    )
     parser.add_argument("--dry-run", action="store_true", help="Print config and exit")
     args = parser.parse_args()
 
@@ -155,10 +180,18 @@ def main() -> None:
         plots.plot_error_distribution(cfg, pairs, "error_distribution.png"),
         plots.plot_scatter(cfg, pairs, "scatter_fc_vs_obs.png"),
         plots.plot_event_timeseries(cfg, pairs, "event_timeseries.png"),
-        plots.plot_station_bias_map(cfg, by_station_ev,
-                                    "Mean 10 m wind-speed error — event days", "map_bias_event.png"),
-        plots.plot_station_bias_map(cfg, by_station_base,
-                                    "Mean 10 m wind-speed error — full window", "map_bias_all.png"),
+        plots.plot_station_bias_map(
+            cfg,
+            by_station_ev,
+            "Mean 10 m wind-speed error — event days",
+            "map_bias_event.png",
+        ),
+        plots.plot_station_bias_map(
+            cfg,
+            by_station_base,
+            "Mean 10 m wind-speed error — full window",
+            "map_bias_all.png",
+        ),
     ]
     print("\nFigures written:")
     for f in figs:

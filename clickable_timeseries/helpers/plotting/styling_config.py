@@ -59,9 +59,9 @@ class TimeseriesStylingConfiguration:
 
         # Single station colors for different data types
         self.single_station_colors = {
-            "obs":      "#000000",  # Black     (Observations — max contrast)
-            "aifs":     "#D55E00",  # Vermillion
-            "ifs":      "#0072B2",  # Blue
+            "obs": "#000000",  # Black     (Observations — max contrast)
+            "aifs": "#D55E00",  # Vermillion
+            "ifs": "#0072B2",  # Blue
             "forecast": "#009E73",  # Bluish Green
         }
 
@@ -83,41 +83,41 @@ class TimeseriesStylingConfiguration:
         # series remain distinguishable even in greyscale or for users who
         # cannot rely on colour alone.
         self.model_colors = {
-            "ifs-single":    "#0072B2",  # Blue
-            "aifs-single":   "#D55E00",  # Vermillion
+            "ifs-single": "#0072B2",  # Blue
+            "aifs-single": "#D55E00",  # Vermillion
             "ifs4km-single": "#009E73",  # Bluish Green
             "hybrid-single": "#E69F00",  # Orange
             "rd-experiment": "#CC79A7",  # Reddish Purple
-            "Observations":  "#000000",  # Black (always — maximum contrast)
+            "Observations": "#000000",  # Black (always — maximum contrast)
         }
 
         # Each model uses a distinct dash pattern in addition to colour,
         # providing a second visual channel for accessibility.
         self.model_styles = {
-            "ifs-single":    {"dash": "solid",       "width": 2},
-            "aifs-single":   {"dash": "dash",        "width": 2},
-            "ifs4km-single": {"dash": "dot",         "width": 2},
-            "hybrid-single": {"dash": "dashdot",     "width": 2},
-            "rd-experiment": {"dash": "longdashdot",  "width": 2},
-            "Observations":  {"dash": "solid",       "width": 3},
+            "ifs-single": {"dash": "solid", "width": 2},
+            "aifs-single": {"dash": "dash", "width": 2},
+            "ifs4km-single": {"dash": "dot", "width": 2},
+            "hybrid-single": {"dash": "dashdot", "width": 2},
+            "rd-experiment": {"dash": "longdashdot", "width": 2},
+            "Observations": {"dash": "solid", "width": 3},
             # Legacy look-up keys kept for backwards compatibility
-            "AIFS": {"dash": "dash",  "width": 2},
-            "IFS":  {"dash": "solid", "width": 2},
+            "AIFS": {"dash": "dash", "width": 2},
+            "IFS": {"dash": "solid", "width": 2},
         }
 
         # Single point mode colors (one location → distinguish models by colour)
         self.single_point_colors = {
-            "ifs-single":    self.model_colors["ifs-single"],
-            "aifs-single":   self.model_colors["aifs-single"],
+            "ifs-single": self.model_colors["ifs-single"],
+            "aifs-single": self.model_colors["aifs-single"],
             "ifs4km-single": self.model_colors["ifs4km-single"],
             "hybrid-single": self.model_colors["hybrid-single"],
             "rd-experiment": self.model_colors["rd-experiment"],
-            "Observations":  self.model_colors["Observations"],
+            "Observations": self.model_colors["Observations"],
             # Legacy keys
             "AIFS": self.model_colors["aifs-single"],
-            "IFS":  self.model_colors["ifs-single"],
+            "IFS": self.model_colors["ifs-single"],
             "aifs": self.model_colors["aifs-single"],
-            "ifs":  self.model_colors["ifs-single"],
+            "ifs": self.model_colors["ifs-single"],
             "Observations_legacy": "blue",
         }
 
@@ -397,9 +397,7 @@ class TimeseriesStylingConfiguration:
 
         """
         base = self._get_model_base_name(model_name)
-        return self.model_styles.get(
-            base, {"dash": "solid", "width": 2}
-        )
+        return self.model_styles.get(base, {"dash": "solid", "width": 2})
 
     def get_single_point_color(self, model_name, point_color):
         """Get color for single point mode visualization.

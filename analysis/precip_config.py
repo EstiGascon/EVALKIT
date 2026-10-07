@@ -37,16 +37,24 @@ class ModelSpec:
 
 
 MODELS: tuple[ModelSpec, ...] = (
-    ModelSpec("ifs", "IFS-control", "od", "oper", "fc", "0001", "228", ("0000", "1200")),
-    ModelSpec("aifs", "AIFS-single", "ai", "oper", "fc", "0001", "228", ("0000", "1200")),
-    ModelSpec("j1l8", "Hybrid (j1l8)", "rd", "oper", "fc", "j1l8", "228.128", ("0000",)),
+    ModelSpec(
+        "ifs", "IFS-control", "od", "oper", "fc", "0001", "228", ("0000", "1200")
+    ),
+    ModelSpec(
+        "aifs", "AIFS-single", "ai", "oper", "fc", "0001", "228", ("0000", "1200")
+    ),
+    ModelSpec(
+        "j1l8", "Hybrid (j1l8)", "rd", "oper", "fc", "j1l8", "228.128", ("0000",)
+    ),
 )
 
 # IFS at 4.4 km resolution (research experiment), used in place of the hybrid.
 MODELS_IEKM: tuple[ModelSpec, ...] = (
     MODELS[0],
     MODELS[1],
-    ModelSpec("iekm", "DestinE 4.4km (iekm)", "rd", "oper", "fc", "iekm", "228.128", ("0000",)),
+    ModelSpec(
+        "iekm", "DestinE 4.4km (iekm)", "rd", "oper", "fc", "iekm", "228.128", ("0000",)
+    ),
 )
 
 
@@ -73,7 +81,9 @@ class PrecipConfig:
     obs_sources: str = "synop"
     obs_parameter: str = "tp"
     obs_period: int = 24
-    obs_time: str = "06"  # 24 h accumulation valid at 06 UTC (matches the 42-66 h window)
+    obs_time: str = (
+        "06"  # 24 h accumulation valid at 06 UTC (matches the 42-66 h window)
+    )
     obs_missing_value: float = 3e38
 
     # --- Paths --------------------------------------------------------------
@@ -83,6 +93,7 @@ class PrecipConfig:
     helpers_pkg_dir: Path = field(default=REPO_ROOT / "clickable_timeseries")
 
     def __post_init__(self) -> None:
+        """Create output directories."""
         for d in (self.data_dir, self.figures_dir, self.results_dir):
             d.mkdir(parents=True, exist_ok=True)
 
@@ -94,12 +105,14 @@ class PrecipConfig:
 
     @property
     def forecast_cache_dir(self) -> Path:
+        """Directory for cached forecast GRIBs (created if missing)."""
         d = self.data_dir / "forecasts_precip"
         d.mkdir(parents=True, exist_ok=True)
         return d
 
     @property
     def obs_dir(self) -> Path:
+        """Directory for STVL tp observations of the configured period."""
         return self.data_dir / "observations" / "tp" / f"tp_{self.obs_period}h"
 
     def steps_for(self, base: dt.datetime) -> tuple[int, int]:
@@ -108,7 +121,7 @@ class PrecipConfig:
         return start, start + 24
 
     def base_times(self, spec: ModelSpec) -> list[dt.datetime]:
-        """Initialisation times (for a model's cycles) that bracket the window."""
+        """Return initialisation times (for a model's cycles) that bracket the window."""
         out: list[dt.datetime] = []
         day = self.lead_base_start.date()
         end_day = self.lead_base_end.date()
@@ -122,4 +135,5 @@ class PrecipConfig:
         return sorted(out)
 
     def in_bbox(self, lat: float, lon: float) -> bool:
+        """Whether a point lies inside the study box."""
         return self.south <= lat <= self.north and self.west <= lon <= self.east

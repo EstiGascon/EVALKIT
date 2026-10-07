@@ -514,6 +514,7 @@ class TimeseriesUI:
                 return
 
             from helpers.stations_manipulating import GeoDataProcessor
+
             geo_files = GeoDataProcessor.get_geo_files(folder_path)
             if not geo_files:
                 StatusMessageHandler.show_obs_error(
@@ -572,7 +573,9 @@ class TimeseriesUI:
             expected_obs = forecast_to_obs.get(selected_param, selected_param)
             # Accept both naming conventions (mx2t ≡ tmax, mn2t ≡ tmin)
             _aliases = {"tmax": "mx2t", "tmin": "mn2t", "mx2t": "mx2t", "mn2t": "mn2t"}
-            if _aliases.get(detected_param, detected_param) == _aliases.get(expected_obs, expected_obs):
+            if _aliases.get(detected_param, detected_param) == _aliases.get(
+                expected_obs, expected_obs
+            ):
                 parameter_matches = True
 
             if parameter_matches:

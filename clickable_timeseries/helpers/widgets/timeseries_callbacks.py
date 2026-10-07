@@ -61,7 +61,9 @@ class TimeseriesCallbacks:
 
     def _add_observation_data(self, point_data, station_id, selected_param=None):
         """Add observation data with unit handling."""
-        return self.observation_handler._add_observation_data(point_data, station_id, selected_param)
+        return self.observation_handler._add_observation_data(
+            point_data, station_id, selected_param
+        )
 
     def _create_unified_plot(self, parameter_name):
         """Create plot with time period mismatch detection."""

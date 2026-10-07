@@ -77,8 +77,8 @@ class WindSpeedProcessor:
 
         """
         try:
-            u_fields = dataset.sel({'parameter.variable': '10u'})
-            v_fields = dataset.sel({'parameter.variable': '10v'})
+            u_fields = dataset.sel({"parameter.variable": "10u"})
+            v_fields = dataset.sel({"parameter.variable": "10v"})
             return len(u_fields) > 0 and len(v_fields) > 0
         except Exception:
             return False
@@ -96,8 +96,8 @@ class WindSpeedProcessor:
 
         """
         try:
-            u_fields = dataset.sel({'parameter.variable': '10u'})
-            v_fields = dataset.sel({'parameter.variable': '10v'})
+            u_fields = dataset.sel({"parameter.variable": "10u"})
+            v_fields = dataset.sel({"parameter.variable": "10v"})
 
             if len(u_fields) == 0 or len(v_fields) == 0:
                 return None

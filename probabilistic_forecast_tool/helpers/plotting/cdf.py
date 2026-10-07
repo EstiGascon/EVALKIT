@@ -121,6 +121,7 @@ class CDFPlotting:
             except NotImplementedError:
                 # earthkit >=0.17: MaskFieldList.to_xarray() is abstract.
                 from earthkit.data import FieldList as _EkFL
+
                 return _EkFL.from_fields(list(data)).to_xarray()
         raise ValueError(f"Cannot convert {type(data)} to xarray format")
 
@@ -371,7 +372,15 @@ class CDFPlotting:
                 period_data = xr_data.sel(step=period_steps_ns)
                 aggregated_data = period_data.mean(dim="step")
 
-            elif parameter in ["2tmax", "mx2t6", "10fg", "10fg6", "cape", "capeshear", "capes"]:
+            elif parameter in [
+                "2tmax",
+                "mx2t6",
+                "10fg",
+                "10fg6",
+                "cape",
+                "capeshear",
+                "capes",
+            ]:
                 period_data = xr_data.sel(step=period_steps_ns)
                 aggregated_data = period_data.max(dim="step")
 
@@ -858,6 +867,7 @@ class CDFPlotting:
             forecast_time: Forecast time string
             step_start: Start of accumulation period in hours
             step_end: End of accumulation period in hours
+            model_name: Optional model label shown in the title
 
         Returns:
             Formatted title string for the plot
@@ -928,6 +938,7 @@ class CDFPlotting:
             step_end: End of aggregation period in hours
             target_unit: Target unit for display (auto-detected if None)
             figsize: Figure size as (width, height) in inches
+            model_name: Optional model label shown in the title
 
         Returns:
             Matplotlib Figure object containing the CDF plot
@@ -952,13 +963,20 @@ class CDFPlotting:
         # file loading paths.
         top_metadata = cdf_data.get("metadata", {})
         if model_name is None:
-            model_name = top_metadata.get("model_display_name") or top_metadata.get("model_class") or None
+            model_name = (
+                top_metadata.get("model_display_name")
+                or top_metadata.get("model_class")
+                or None
+            )
         raw_analysis_date = top_metadata.get("analysis_date")  # "YYYY-MM-DD"
         if raw_analysis_date:
             # _generate_plot_title expects "YYYYMMDD" format
             try:
                 from datetime import datetime as _dt
-                title_date = _dt.strptime(raw_analysis_date, "%Y-%m-%d").strftime("%Y%m%d")
+
+                title_date = _dt.strptime(raw_analysis_date, "%Y-%m-%d").strftime(
+                    "%Y%m%d"
+                )
             except ValueError:
                 title_date = raw_analysis_date
         else:
@@ -974,7 +992,6 @@ class CDFPlotting:
                 climate_metadata = climate_info.get("metadata", {})
 
                 climate_date = climate_metadata.get("date", None)
-                climate_time = climate_metadata.get("time", None)
 
                 clim_x, clim_y = self._process_climate_quantiles(
                     climate_dataset, parameter, lat, lon, target_unit
@@ -1062,7 +1079,14 @@ class CDFPlotting:
         ax.grid(True, color="grey", linestyle="--", alpha=0.7)
 
         title = self._generate_plot_title(
-            parameter, lat, lon, title_date, title_time, step_start, step_end, model_name
+            parameter,
+            lat,
+            lon,
+            title_date,
+            title_time,
+            step_start,
+            step_end,
+            model_name,
         )
         ax.set_title(title, fontsize=14, fontweight="bold")
 

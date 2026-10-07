@@ -394,8 +394,24 @@ class StylingConfiguration:
         ]
         # Levels in geopotential height metres (= m²/s² / 9.80665)
         self.geopotential_levels = [
-            4800, 4880, 4960, 5040, 5120, 5200, 5280, 5360,
-            5440, 5520, 5600, 5680, 5760, 5840, 5920, 6000, 6080, 6160,
+            4800,
+            4880,
+            4960,
+            5040,
+            5120,
+            5200,
+            5280,
+            5360,
+            5440,
+            5520,
+            5600,
+            5680,
+            5760,
+            5840,
+            5920,
+            6000,
+            6080,
+            6160,
         ]
 
     def _load_config(self):
@@ -631,7 +647,11 @@ class StylingConfiguration:
         return config
 
     def transform_data_and_levels(  # noqa: PLR0912
-        self, data, parameter_name: str, levels: list, unit: str = None,
+        self,
+        data,
+        parameter_name: str,
+        levels: list,
+        unit: str = None,
         model_class: str = None,
     ):
         """Transform both data and levels based on input unit.

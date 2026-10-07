@@ -13,7 +13,6 @@ import argparse
 import datetime as dt
 
 import pandas as pd
-
 import precip_forecasts as F
 import precip_obs as O
 import precip_plots as P
@@ -27,6 +26,7 @@ CM_THRESHOLD = 5.0  # mm
 
 
 def main(test: bool = False, models=MODELS, suffix: str = "") -> None:
+    """Run the event, fixed-lead and predictability comparisons."""
     cfg = PrecipConfig()
     order = tuple(spec.key for spec in models)
 
@@ -54,7 +54,10 @@ def main(test: bool = False, models=MODELS, suffix: str = "") -> None:
     print("\nFixed-lead forecasts (T+54 to window end, matched across all models):")
     fixed_lead = F.load_fixed_lead_forecasts(cfg, 54, models=models)
     P.plot_event_intercomparison(
-        cfg, obs, fixed_lead, f"precip_event_intercomparison_54h{suffix}.png",
+        cfg,
+        obs,
+        fixed_lead,
+        f"precip_event_intercomparison_54h{suffix}.png",
         subtitle="all models matched at T+54 (lead to end of the 24 h window)",
         order=order,
     )
@@ -79,7 +82,11 @@ def main(test: bool = False, models=MODELS, suffix: str = "") -> None:
             rows.append(row)
 
     P.plot_lead_time_comparison(
-        cfg, obs, fields_by_model, f"precip_lead_time_comparison{suffix}.png", order=order
+        cfg,
+        obs,
+        fields_by_model,
+        f"precip_lead_time_comparison{suffix}.png",
+        order=order,
     )
 
     summary = pd.DataFrame(rows)
@@ -94,7 +101,9 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--test", action="store_true", help="single-model smoke test")
     ap.add_argument(
-        "--variant", choices=["hybrid", "iekm"], default="hybrid",
+        "--variant",
+        choices=["hybrid", "iekm"],
+        default="hybrid",
         help="third model to compare alongside IFS-control/AIFS-single",
     )
     args = ap.parse_args()

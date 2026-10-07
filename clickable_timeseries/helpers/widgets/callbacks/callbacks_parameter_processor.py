@@ -204,9 +204,7 @@ class ParameterProcessor:
                         selected_points, all_datasets, selected_param
                     )
                 elif selected_param == "10ff":
-                    self._process_wind_speed_multi_points(
-                        selected_points, all_datasets
-                    )
+                    self._process_wind_speed_multi_points(selected_points, all_datasets)
                 elif selected_param == "10ff_daily":
                     self._process_daily_wind_speed_multi_points(
                         selected_points, all_datasets

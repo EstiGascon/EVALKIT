@@ -198,7 +198,9 @@ class ObservationsRetriever:
                 os.makedirs(metview_tmp, exist_ok=True)
                 env["METVIEW_TMPDIR"] = metview_tmp
 
-            result_proc = subprocess.run(cmd_list, check=True, capture_output=True, text=True, env=env)
+            result_proc = subprocess.run(
+                cmd_list, check=True, capture_output=True, text=True, env=env
+            )
             if result_proc.stdout:
                 print(result_proc.stdout)
 

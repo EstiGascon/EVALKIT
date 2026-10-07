@@ -11,7 +11,6 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-
 from precip_config import PrecipConfig
 
 
@@ -29,7 +28,9 @@ def retrieve_observations(cfg: PrecipConfig, force: bool = False) -> Path:
     out_dir = cfg.obs_dir
     existing = sorted(out_dir.glob("tp*_obs_*.geo")) if out_dir.exists() else []
     if existing and not force:
-        print(f"\u2713 tp24 observations already present ({len(existing)} files) in {out_dir}")
+        print(
+            f"\u2713 tp24 observations already present ({len(existing)} files) in {out_dir}"
+        )
         return out_dir
 
     retriever = _import_retriever(cfg)
@@ -49,9 +50,7 @@ def retrieve_observations(cfg: PrecipConfig, force: bool = False) -> Path:
 
 
 def _parse_geo_file(path: Path, missing: float) -> pd.DataFrame:
-    """Parse one tp24 ``.geo`` file, using header date/time as the valid time."""
-    header_date: str | None = None
-    header_time: str | None = None
+    """Parse one tp24 ``.geo`` file; each row's date/time is its valid time."""
     rows: list[dict] = []
     in_data = False
     with path.open("r", encoding="utf-8", errors="replace") as fh:
@@ -61,10 +60,6 @@ def _parse_geo_file(path: Path, missing: float) -> pd.DataFrame:
                 in_data = True
                 continue
             if not in_data:
-                if line.startswith("date="):
-                    header_date = line.split("=", 1)[1].strip()
-                elif line.startswith("time="):
-                    header_time = line.split("=", 1)[1].strip()
                 continue
             if not line or line.startswith("#"):
                 continue
@@ -83,8 +78,14 @@ def _parse_geo_file(path: Path, missing: float) -> pd.DataFrame:
             if value >= missing:
                 continue
             rows.append(
-                {"stnid": stnid, "lat": lat, "lon": lon,
-                 "date": date_s, "time": time_s, "obs": value}
+                {
+                    "stnid": stnid,
+                    "lat": lat,
+                    "lon": lon,
+                    "date": date_s,
+                    "time": time_s,
+                    "obs": value,
+                }
             )
 
     df = pd.DataFrame(rows)
@@ -111,8 +112,10 @@ def load_observations(cfg: PrecipConfig) -> pd.DataFrame:
     obs = pd.concat(frames, ignore_index=True)
     obs = obs[obs["valid_time"] == cfg.window_end]
     mask = (
-        (obs["lat"] >= cfg.south) & (obs["lat"] <= cfg.north)
-        & (obs["lon"] >= cfg.west) & (obs["lon"] <= cfg.east)
+        (obs["lat"] >= cfg.south)
+        & (obs["lat"] <= cfg.north)
+        & (obs["lon"] >= cfg.west)
+        & (obs["lon"] <= cfg.east)
     )
     obs = obs.loc[mask].copy()
     obs.drop_duplicates(subset="stnid", inplace=True)

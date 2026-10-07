@@ -1,5 +1,4 @@
-"""Retrieval of total precipitation for the three models and derivation of the
-fixed 24 h accumulation over the case-study window.
+"""Retrieve total precipitation and derive the fixed 24 h case-study accumulation.
 
 For a given model and initialisation time, the 24 h total is the difference of
 the accumulated ``tp`` field at the two forecast steps that bracket the fixed
@@ -15,7 +14,6 @@ from dataclasses import dataclass
 
 import earthkit.data as ekd
 import numpy as np
-
 from precip_config import MODELS, ModelSpec, PrecipConfig
 
 
@@ -113,7 +111,9 @@ def _restore_tmpdir(orig: str | None) -> None:
         os.environ["TMPDIR"] = orig
 
 
-def _cache_path(cfg: PrecipConfig, spec: ModelSpec, base: dt.datetime, s0: int, s1: int):
+def _cache_path(
+    cfg: PrecipConfig, spec: ModelSpec, base: dt.datetime, s0: int, s1: int
+):
     return cfg.forecast_cache_dir / f"{spec.key}_tp_{base:%Y%m%d%H}_{s0}_{s1}.grib"
 
 
@@ -191,8 +191,14 @@ def tp24_field(
     acc = _to_mm(by_step[s1] - by_step[s0], units)
     acc = np.clip(acc, 0.0, None)  # guard tiny negative round-off
     return PrecipField(
-        model=spec.key, label=spec.label, base=base,
-        step_start=s0, step_end=s1, lats=lats, lons=lons, tp24=acc,
+        model=spec.key,
+        label=spec.label,
+        base=base,
+        step_start=s0,
+        step_end=s1,
+        lats=lats,
+        lons=lons,
+        tp24=acc,
     )
 
 
@@ -206,13 +212,17 @@ def load_predictability(
         if fld is None:
             continue
         out.append(fld)
-        print(f"  \u2713 {spec.label} {base:%Y-%m-%d %HZ}  lead {fld.lead:>3}h  "
-              f"max {fld.tp24.max():.1f} mm")
+        print(
+            f"  \u2713 {spec.label} {base:%Y-%m-%d %HZ}  lead {fld.lead:>3}h  "
+            f"max {fld.tp24.max():.1f} mm"
+        )
     return out
 
 
 def load_event_forecasts(
-    cfg: PrecipConfig, reported_base: dt.datetime, models: tuple[ModelSpec, ...] = MODELS,
+    cfg: PrecipConfig,
+    reported_base: dt.datetime,
+    models: tuple[ModelSpec, ...] = MODELS,
     force: bool = False,
 ) -> dict[str, PrecipField]:
     """One forecast per model targeting the reported window.
@@ -226,19 +236,25 @@ def load_event_forecasts(
     target_lead, _ = cfg.steps_for(reported_base)
     out: dict[str, PrecipField] = {}
     for spec in models:
-        candidates = sorted(cfg.base_times(spec), key=lambda b: abs(cfg.steps_for(b)[0] - target_lead))
+        candidates = sorted(
+            cfg.base_times(spec), key=lambda b: abs(cfg.steps_for(b)[0] - target_lead)
+        )
         for base in candidates:
             fld = tp24_field(cfg, spec, base, force=force)
             if fld is not None:
                 out[spec.key] = fld
-                print(f"  \u2713 {spec.label} event run {base:%Y-%m-%d %HZ}  "
-                      f"lead {fld.lead}h  max {fld.tp24.max():.1f} mm")
+                print(
+                    f"  \u2713 {spec.label} event run {base:%Y-%m-%d %HZ}  "
+                    f"lead {fld.lead}h  max {fld.tp24.max():.1f} mm"
+                )
                 break
     return out
 
 
 def load_fixed_lead_forecasts(
-    cfg: PrecipConfig, lead_hours: int, models: tuple[ModelSpec, ...] = MODELS,
+    cfg: PrecipConfig,
+    lead_hours: int,
+    models: tuple[ModelSpec, ...] = MODELS,
     force: bool = False,
 ) -> dict[str, PrecipField]:
     """One forecast per model, all initialised at the same lead time to the window.
@@ -252,11 +268,15 @@ def load_fixed_lead_forecasts(
     out: dict[str, PrecipField] = {}
     for spec in models:
         if base.strftime("%H%M") not in spec.cycles:
-            print(f"  \u26a0 {spec.label}: {base:%H}Z is not a valid cycle for this model")
+            print(
+                f"  \u26a0 {spec.label}: {base:%H}Z is not a valid cycle for this model"
+            )
             continue
         fld = tp24_field(cfg, spec, base, force=force)
         if fld is not None:
             out[spec.key] = fld
-            print(f"  \u2713 {spec.label} fixed-lead run {base:%Y-%m-%d %HZ}  "
-                  f"lead {fld.lead}h  max {fld.tp24.max():.1f} mm")
+            print(
+                f"  \u2713 {spec.label} fixed-lead run {base:%Y-%m-%d %HZ}  "
+                f"lead {fld.lead}h  max {fld.tp24.max():.1f} mm"
+            )
     return out

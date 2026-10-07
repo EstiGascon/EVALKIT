@@ -82,7 +82,7 @@ class WindGustProcessor:
 
         """
         try:
-            gust_fields = dataset.sel({'parameter.variable': '10fg'})
+            gust_fields = dataset.sel({"parameter.variable": "10fg"})
             return len(gust_fields) > 0
         except Exception:
             return False
@@ -99,7 +99,7 @@ class WindGustProcessor:
 
         """
         try:
-            gust_fields = dataset.sel({'parameter.variable': '10fg'})
+            gust_fields = dataset.sel({"parameter.variable": "10fg"})
 
             if len(gust_fields) == 0:
                 return None

@@ -123,7 +123,9 @@ class DataManagementCallbacks:
                 grid = None
 
             if config["data_source"] == "mars":
-                selected_models = params.get("selected_models", [params.get("model_class", "ifs")])
+                selected_models = params.get(
+                    "selected_models", [params.get("model_class", "ifs")]
+                )
 
                 if self.parent.ui:
                     self.parent.ui.show_alert_message(
@@ -139,11 +141,15 @@ class DataManagementCallbacks:
                         if self.parent.ui:
                             self.parent.ui.show_alert_message(
                                 f"Retrieving {model.upper()} data ...",
-                                "info", section="data", permanent=True,
+                                "info",
+                                section="data",
+                                permanent=True,
                             )
                         model_params = self._resolve_steps_for_model(params, model)
-                        multi_data[model] = self._retrieve_single_model_meteogram_plumes(
-                            model_params, model, grid
+                        multi_data[model] = (
+                            self._retrieve_single_model_meteogram_plumes(
+                                model_params, model, grid
+                            )
                         )
                     data = {"_multi_model": True, "models": multi_data}
                 else:
@@ -185,7 +191,9 @@ class DataManagementCallbacks:
 
             # Preserve previously loaded observations before overwriting
             prev_obs = None
-            if hasattr(self.parent, "current_data") and isinstance(self.parent.current_data, dict):
+            if hasattr(self.parent, "current_data") and isinstance(
+                self.parent.current_data, dict
+            ):
                 prev_obs = self.parent.current_data.get("observations")
             self.parent.current_data = data
             if prev_obs is not None:
@@ -284,7 +292,9 @@ class DataManagementCallbacks:
 
             # Preserve previously loaded observations before overwriting
             prev_obs = None
-            if hasattr(self.parent, "current_data") and isinstance(self.parent.current_data, dict):
+            if hasattr(self.parent, "current_data") and isinstance(
+                self.parent.current_data, dict
+            ):
                 prev_obs = self.parent.current_data.get("observations")
             self.parent.current_data = data
             if prev_obs is not None:
@@ -318,7 +328,9 @@ class DataManagementCallbacks:
                 grid = None
 
             if config["data_source"] == "mars":
-                selected_models = params.get("selected_models", [params.get("model_class", "ifs")])
+                selected_models = params.get(
+                    "selected_models", [params.get("model_class", "ifs")]
+                )
 
                 if self.parent.ui:
                     self.parent.ui.show_alert_message(
@@ -334,11 +346,15 @@ class DataManagementCallbacks:
                         if self.parent.ui:
                             self.parent.ui.show_alert_message(
                                 f"Retrieving {model.upper()} plumes data ...",
-                                "info", section="data", permanent=True,
+                                "info",
+                                section="data",
+                                permanent=True,
                             )
                         model_params = self._resolve_steps_for_model(params, model)
-                        multi_data[model] = self._retrieve_single_model_meteogram_plumes(
-                            model_params, model, grid
+                        multi_data[model] = (
+                            self._retrieve_single_model_meteogram_plumes(
+                                model_params, model, grid
+                            )
                         )
                     data = {"_multi_model": True, "models": multi_data}
                 else:
@@ -380,7 +396,9 @@ class DataManagementCallbacks:
 
             # Preserve previously loaded observations before overwriting
             prev_obs = None
-            if hasattr(self.parent, "current_data") and isinstance(self.parent.current_data, dict):
+            if hasattr(self.parent, "current_data") and isinstance(
+                self.parent.current_data, dict
+            ):
                 prev_obs = self.parent.current_data.get("observations")
             self.parent.current_data = data
             if prev_obs is not None:

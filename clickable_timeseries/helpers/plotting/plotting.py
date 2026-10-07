@@ -83,7 +83,9 @@ class PlottingManager:
                 f"Unsupported precipitation conversion: {from_unit} to {to_unit}"
             )
 
-    def process_data_units(self, data, parameter_name, data_source="observed", model_name=None):  # noqa: PLR0911, PLR0912
+    def process_data_units(
+        self, data, parameter_name, data_source="observed", model_name=None
+    ):  # noqa: PLR0911, PLR0912
         """Process data to ensure correct units.
 
         Args:
@@ -499,7 +501,10 @@ class PlottingManager:
 
                         if len(forecast_ts) > 0:
                             processed_forecast_ts = self.process_data_units(
-                                forecast_ts, parameter_name, "forecast", model_name=model_name
+                                forecast_ts,
+                                parameter_name,
+                                "forecast",
+                                model_name=model_name,
                             )
                             station_info = stations_gdf.loc[station_id]
                             model_color = self.style_config.get_data_color(
@@ -881,9 +886,7 @@ class PlottingManager:
             return forecast_data_dict
 
         # Align all models to the latest start so they share a common origin.
-        common_start = max(
-            df.index.min() for df in forecast_models.values()
-        )
+        common_start = max(df.index.min() for df in forecast_models.values())
 
         aligned_forecast_data = forecast_data_dict.copy()
 

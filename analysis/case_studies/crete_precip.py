@@ -14,12 +14,13 @@ import earthkit.data as ekd
 import matplotlib
 
 matplotlib.use("Agg")
+import cartopy.crs as ccrs  # noqa: E402
+import cartopy.feature as cfeature  # noqa: E402
+import cartopy.io.shapereader as shpreader  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from matplotlib.collections import PolyCollection  # noqa: E402
-from matplotlib.colors import BoundaryNorm, ListedColormap  # noqa: E402
-
+import shapely  # noqa: E402
 from catalonia_precip import (  # noqa: E402
     CACHE_DIR,
     FIG_DIR,
@@ -27,6 +28,8 @@ from catalonia_precip import (  # noqa: E402
     RESULTS_DIR,
     _haversine_km,
 )
+from matplotlib.collections import PolyCollection  # noqa: E402
+from matplotlib.colors import BoundaryNorm, ListedColormap  # noqa: E402
 from precip_forecasts import (  # noqa: E402
     _as_fieldlist,
     _field_latlon,
@@ -37,11 +40,6 @@ from precip_forecasts import (  # noqa: E402
     _to_mm,
 )
 from precip_obs import _parse_geo_file  # noqa: E402
-
-import cartopy.crs as ccrs  # noqa: E402
-import cartopy.feature as cfeature  # noqa: E402
-import cartopy.io.shapereader as shpreader  # noqa: E402
-import shapely  # noqa: E402
 
 BASE = dt.datetime(2026, 9, 30, 0)
 S0, S1 = 0, 120
@@ -55,7 +53,9 @@ CRETE_BOX = (34.8, 23.5, 35.7, 26.35)  # S, W, N, E
 
 OBS_DIR = CACHE_DIR.parent / "observations" / "tp" / "tp_24h_crete"
 OBS_SOURCES = "synop hdobs"
-OBS_DAYS = [BASE + dt.timedelta(days=d) for d in range(1, S1 // 24 + 1)]  # 24 h ending 00Z
+OBS_DAYS = [
+    BASE + dt.timedelta(days=d) for d in range(1, S1 // 24 + 1)
+]  # 24 h ending 00Z
 HELPERS_PKG = CACHE_DIR.parents[2] / "clickable_timeseries"
 VINO_PATH = "/home/moz/bin/vino_getgeo"
 MISSING = 3e38
@@ -66,15 +66,70 @@ CITIES = {
     "Agios Nikolaos": (35.19, 25.72),
 }
 
-LEVELS = [0, 1, 2, 3, 4, 5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80, 100, 125, 150,
-          175, 200, 225, 250, 275, 300, 350, 400, 500, 600, 750, 1000]
+LEVELS = [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    10,
+    15,
+    20,
+    25,
+    30,
+    40,
+    50,
+    60,
+    70,
+    80,
+    100,
+    125,
+    150,
+    175,
+    200,
+    225,
+    250,
+    275,
+    300,
+    350,
+    400,
+    500,
+    600,
+    750,
+    1000,
+]
 COLOURS = [
-    "#ffffff", "#a6dcfa", "#79bcf2", "#4f8ef0", "#2741e6",  # 0-5
-    "#bff200", "#99e000", "#66c800", "#33b000", "#008c1a",  # 5-30
-    "#ffd800", "#ffbe00", "#ffa000", "#ff8200", "#f06000",  # 30-80
-    "#ffb4b4", "#ff6e6e", "#ec1c1c", "#c80000", "#960000",  # 80-200
-    "#e6b4ff", "#cc78ff", "#a846f0", "#8020d8", "#5a0a9c",  # 200-350
-    "#8c8c8c", "#6e6e6e", "#505050", "#323232", "#000000",  # 350-1000
+    "#ffffff",
+    "#a6dcfa",
+    "#79bcf2",
+    "#4f8ef0",
+    "#2741e6",  # 0-5
+    "#bff200",
+    "#99e000",
+    "#66c800",
+    "#33b000",
+    "#008c1a",  # 5-30
+    "#ffd800",
+    "#ffbe00",
+    "#ffa000",
+    "#ff8200",
+    "#f06000",  # 30-80
+    "#ffb4b4",
+    "#ff6e6e",
+    "#ec1c1c",
+    "#c80000",
+    "#960000",  # 80-200
+    "#e6b4ff",
+    "#cc78ff",
+    "#a846f0",
+    "#8020d8",
+    "#5a0a9c",  # 200-350
+    "#8c8c8c",
+    "#6e6e6e",
+    "#505050",
+    "#323232",
+    "#000000",  # 350-1000
 ]
 CMAP = ListedColormap(COLOURS)
 CMAP.set_over("#000000")
@@ -135,12 +190,20 @@ def _crete_land():
     s, w, n, e = CRETE_BOX
     box = shapely.box(w, s, e, n)
     path = shpreader.natural_earth(resolution="10m", category="physical", name="land")
-    parts = shapely.get_parts(shapely.union_all(
-        [g.intersection(box) for g in shpreader.Reader(path).geometries() if g.intersects(box)]))
+    parts = shapely.get_parts(
+        shapely.union_all(
+            [
+                g.intersection(box)
+                for g in shpreader.Reader(path).geometries()
+                if g.intersects(box)
+            ]
+        )
+    )
     return max(parts, key=lambda p: p.area)
 
 
 def stats(res: dict, land) -> dict:
+    """Island maximum/mean and city values for one forecast."""
     lats, lons, tp = res["lats"], res["lons"], res["tp"]
     on_land = shapely.contains_xy(land, lons, lats)
     i_max = np.argmax(np.where(on_land, tp, -1))
@@ -174,12 +237,15 @@ def _gridbox_verts(lats: np.ndarray, lons: np.ndarray) -> np.ndarray:
         x0 = np.concatenate([[x[0] - dx / 2], (x[1:] + x[:-1]) / 2])
         x1 = np.concatenate([(x[1:] + x[:-1]) / 2, [x[-1] + dx / 2]])
         y0, y1 = lat_lo[j], lat_hi[j]
-        verts[idx] = np.stack([
-            np.column_stack([x0, np.full_like(x0, y0)]),
-            np.column_stack([x1, np.full_like(x0, y0)]),
-            np.column_stack([x1, np.full_like(x0, y1)]),
-            np.column_stack([x0, np.full_like(x0, y1)]),
-        ], axis=1)
+        verts[idx] = np.stack(
+            [
+                np.column_stack([x0, np.full_like(x0, y0)]),
+                np.column_stack([x1, np.full_like(x0, y0)]),
+                np.column_stack([x1, np.full_like(x0, y1)]),
+                np.column_stack([x0, np.full_like(x0, y1)]),
+            ],
+            axis=1,
+        )
     return verts
 
 
@@ -195,6 +261,7 @@ def _map_ax(fig, nrows, ncols, idx):
 
 
 def make_figure(results: dict) -> str:
+    """Draw the 2x2 model precipitation figure."""
     nrows, ncols = 2, 2
     fig = plt.figure(figsize=(18, 10.5))
     last_cf = None
@@ -204,13 +271,27 @@ def make_figure(results: dict) -> str:
         if res is None:
             ax.set_title(f"{spec[1]} \u2014 unavailable", fontsize=15)
             continue
-        last_cf = PolyCollection(_gridbox_verts(res["lats"], res["lons"]),
-                                 array=res["tp"], cmap=CMAP, norm=NORM,
-                                 edgecolors="face", linewidths=0.1, **kw)
+        last_cf = PolyCollection(
+            _gridbox_verts(res["lats"], res["lons"]),
+            array=res["tp"],
+            cmap=CMAP,
+            norm=NORM,
+            edgecolors="face",
+            linewidths=0.1,
+            **kw,
+        )
         ax.add_collection(last_cf)
         st = res["stats"]
-        ax.plot(st["crete_max_lon"], st["crete_max_lat"], marker="x", color="k",
-                markersize=10, mew=2, zorder=6, **kw)
+        ax.plot(
+            st["crete_max_lon"],
+            st["crete_max_lat"],
+            marker="x",
+            color="k",
+            markersize=10,
+            mew=2,
+            zorder=6,
+            **kw,
+        )
         ax.set_title(
             f"{spec[1]} \u2014 T+0\u2013{S1}h\n"
             f"max over Crete {st['crete_max_mm']:.0f} mm (\u00d7), "
@@ -225,10 +306,12 @@ def make_figure(results: dict) -> str:
     fig.suptitle(
         f"Crete \u2014 5-day precipitation, run {BASE:%d %b %Y %H}Z (T+0\u2013{S1}h)\n"
         f"{BASE:%d %b %H}Z \u2192 {VALID_END:%d %b %H}Z",
-        fontsize=20, y=0.98,
+        fontsize=20,
+        y=0.98,
     )
-    fig.subplots_adjust(left=0.04, right=0.98, top=0.86, bottom=0.12,
-                        hspace=0.3, wspace=0.08)
+    fig.subplots_adjust(
+        left=0.04, right=0.98, top=0.86, bottom=0.12, hspace=0.3, wspace=0.08
+    )
     FIG_DIR.mkdir(parents=True, exist_ok=True)
     out = FIG_DIR / f"crete_precip_{BASE:%Y%m%d%H}_{S0}_{S1}.png"
     fig.savefig(out, dpi=130)
@@ -246,31 +329,55 @@ def retrieve_obs(force: bool = False) -> None:
 
     OBS_DIR.mkdir(parents=True, exist_ok=True)
     ObservationsRetriever(vino_path=VINO_PATH).retrieve(
-        sources=OBS_SOURCES, parameter="tp", period=24,
-        start_date=f"{OBS_DAYS[0]:%Y%m%d}", end_date=f"{OBS_DAYS[-1]:%Y%m%d}",
-        times="00", output_dir=str(OBS_DIR),
+        sources=OBS_SOURCES,
+        parameter="tp",
+        period=24,
+        start_date=f"{OBS_DAYS[0]:%Y%m%d}",
+        end_date=f"{OBS_DAYS[-1]:%Y%m%d}",
+        times="00",
+        output_dir=str(OBS_DIR),
     )
 
 
 def load_obs_total() -> pd.DataFrame:
     """Per-station sum of the daily tp24 over the period, complete records only."""
-    frames = [_parse_geo_file(f, MISSING) for f in sorted(OBS_DIR.glob("tp*_obs_*.geo"))]
+    frames = [
+        _parse_geo_file(f, MISSING) for f in sorted(OBS_DIR.glob("tp*_obs_*.geo"))
+    ]
     obs = pd.concat([f for f in frames if not f.empty], ignore_index=True)
     w, e, s, n = EXTENT
-    obs = obs[obs["lat"].between(s, n) & obs["lon"].between(w, e)
-              & obs["valid_time"].isin(OBS_DAYS)]
+    obs = obs[
+        obs["lat"].between(s, n)
+        & obs["lon"].between(w, e)
+        & obs["valid_time"].isin(OBS_DAYS)
+    ]
     obs = obs.drop_duplicates(subset=["stnid", "valid_time"])
-    tot = obs.groupby("stnid").agg(lat=("lat", "first"), lon=("lon", "first"),
-                                    n_days=("obs", "size"), total_mm=("obs", "sum"))
+    tot = obs.groupby("stnid").agg(
+        lat=("lat", "first"),
+        lon=("lon", "first"),
+        n_days=("obs", "size"),
+        total_mm=("obs", "sum"),
+    )
     tot = tot[tot["n_days"] == len(OBS_DAYS)]
     return tot.reset_index().sort_values("total_mm", ascending=False)
 
 
 def make_obs_figure(obs: pd.DataFrame) -> str:
+    """Draw the observed station-total map."""
     fig = plt.figure(figsize=(14, 7))
     ax, kw = _map_ax(fig, 1, 1, 1)
-    sc = ax.scatter(obs["lon"], obs["lat"], c=obs["total_mm"], cmap=CMAP, norm=NORM,
-                    s=110, edgecolor="k", linewidth=0.7, zorder=7, **kw)
+    sc = ax.scatter(
+        obs["lon"],
+        obs["lat"],
+        c=obs["total_mm"],
+        cmap=CMAP,
+        norm=NORM,
+        s=110,
+        edgecolor="k",
+        linewidth=0.7,
+        zorder=7,
+        **kw,
+    )
     ax.set_title(
         f"SYNOP + HDOBS \u2014 {len(obs)} stations with all {len(OBS_DAYS)} days\n"
         f"max {obs['total_mm'].max():.0f} mm, station mean {obs['total_mm'].mean():.0f} mm",
@@ -283,7 +390,8 @@ def make_obs_figure(obs: pd.DataFrame) -> str:
     fig.suptitle(
         f"Crete — observed 5-day precipitation\n"
         f"{BASE:%d %b %H}Z → {VALID_END:%d %b %H}Z {VALID_END:%Y} (sum of daily 24 h totals)",
-        fontsize=20, y=0.98,
+        fontsize=20,
+        y=0.98,
     )
     fig.subplots_adjust(left=0.05, right=0.97, top=0.8, bottom=0.17)
     out = FIG_DIR / f"crete_precip_obs_{BASE:%Y%m%d%H}_{VALID_END:%Y%m%d%H}.png"
@@ -293,6 +401,7 @@ def make_obs_figure(obs: pd.DataFrame) -> str:
 
 
 def main(force: bool = False) -> None:
+    """Build the observation and model figures and CSVs."""
     retrieve_obs(force=force)
     obs = load_obs_total()
     obs_csv = RESULTS_DIR / f"crete_precip_obs_{BASE:%Y%m%d%H}_{VALID_END:%Y%m%d%H}.csv"
@@ -310,8 +419,14 @@ def main(force: bool = False) -> None:
             continue
         res["stats"] = stats(res, land)
         results[spec[0]] = res
-        rows.append({"model": spec[1], "init": f"{BASE:%Y-%m-%d %HZ}",
-                     "steps": f"{S0}-{S1}", **res["stats"]})
+        rows.append(
+            {
+                "model": spec[1],
+                "init": f"{BASE:%Y-%m-%d %HZ}",
+                "steps": f"{S0}-{S1}",
+                **res["stats"],
+            }
+        )
     df = pd.DataFrame(rows)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     csv = RESULTS_DIR / f"crete_precip_{BASE:%Y%m%d%H}_{S0}_{S1}.csv"

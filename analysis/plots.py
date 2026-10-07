@@ -14,7 +14,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-
 from config import StudyConfig  # noqa: E402
 
 try:  # optional geographic context
@@ -31,7 +30,9 @@ def _map_ax(fig, cfg: StudyConfig, subplot=111):
     args = subplot if isinstance(subplot, tuple) else (subplot,)
     if _HAS_CARTOPY:
         ax = fig.add_subplot(*args, projection=ccrs.PlateCarree())
-        ax.set_extent([cfg.west, cfg.east, cfg.south, cfg.north], crs=ccrs.PlateCarree())
+        ax.set_extent(
+            [cfg.west, cfg.east, cfg.south, cfg.north], crs=ccrs.PlateCarree()
+        )
         ax.add_feature(cfeature.COASTLINE, linewidth=0.6)
         ax.add_feature(cfeature.BORDERS, linewidth=0.6)
         ax.add_feature(cfeature.OCEAN, facecolor="#eef4fb")
@@ -81,10 +82,14 @@ def plot_scores_by_lead(cfg: StudyConfig, by_lead: pd.DataFrame, fname: str) -> 
     """Bias and RMSE vs lead time, event vs baseline."""
     fig, axes = plt.subplots(1, 2, figsize=(13, 5), sharex=True)
     colors = {"event": "#d1495b", "baseline": "#4a7ba6"}
-    for period, sub in by_lead.groupby("period"):
-        sub = sub.sort_values("lead_hours")
-        axes[0].plot(sub["lead_hours"], sub["bias"], "-o", color=colors.get(period), label=period)
-        axes[1].plot(sub["lead_hours"], sub["rmse"], "-o", color=colors.get(period), label=period)
+    for period, grp in by_lead.groupby("period"):
+        sub = grp.sort_values("lead_hours")
+        axes[0].plot(
+            sub["lead_hours"], sub["bias"], "-o", color=colors.get(period), label=period
+        )
+        axes[1].plot(
+            sub["lead_hours"], sub["rmse"], "-o", color=colors.get(period), label=period
+        )
     axes[0].axhline(0, color="k", lw=0.8)
     axes[0].set_title("Bias vs lead time")
     axes[0].set_xlabel("Lead time (h)")
@@ -125,11 +130,17 @@ def plot_error_distribution(cfg: StudyConfig, pairs: pd.DataFrame, fname: str) -
     fig, ax = plt.subplots(figsize=(9, 5))
     bins = np.linspace(-8, 8, 65)
     for label, color in (("baseline", "#4a7ba6"), ("event", "#d1495b")):
-        sub = pairs[pairs["is_event"]] if label == "event" else pairs[~pairs["is_event"]]
+        sub = (
+            pairs[pairs["is_event"]] if label == "event" else pairs[~pairs["is_event"]]
+        )
         if sub.empty:
             continue
         ax.hist(
-            sub["error"], bins=bins, density=True, alpha=0.55, color=color,
+            sub["error"],
+            bins=bins,
+            density=True,
+            alpha=0.55,
+            color=color,
             label=f"{label} (bias={sub['error'].mean():.2f})",
         )
     ax.axvline(0, color="k", lw=0.8)
@@ -150,8 +161,12 @@ def plot_scatter(cfg: StudyConfig, pairs: pd.DataFrame, fname: str) -> Path:
     fig, ax = plt.subplots(figsize=(7, 7))
     base = pairs[~pairs["is_event"]]
     ev = pairs[pairs["is_event"]]
-    ax.scatter(base["obs"], base["fc"], s=6, alpha=0.15, color="#4a7ba6", label="baseline")
-    ax.scatter(ev["obs"], ev["fc"], s=14, alpha=0.6, color="#d1495b", label="event days")
+    ax.scatter(
+        base["obs"], base["fc"], s=6, alpha=0.15, color="#4a7ba6", label="baseline"
+    )
+    ax.scatter(
+        ev["obs"], ev["fc"], s=14, alpha=0.6, color="#d1495b", label="event days"
+    )
     lim = max(pairs["obs"].max(), pairs["fc"].max()) * 1.05
     ax.plot([0, lim], [0, lim], "k--", lw=1)
     ax.set_xlim(0, lim)
@@ -168,18 +183,46 @@ def plot_scatter(cfg: StudyConfig, pairs: pd.DataFrame, fname: str) -> Path:
     return out
 
 
-def plot_event_timeseries(cfg: StudyConfig, pairs: pd.DataFrame, fname: str, max_lead: int = 24) -> Path:
+def plot_event_timeseries(
+    cfg: StudyConfig, pairs: pd.DataFrame, fname: str, max_lead: int = 24
+) -> Path:
     """Domain-mean forecast vs observation time series across event days."""
     sub = pairs[pairs["lead_hours"] <= max_lead].copy()
-    ts = sub.groupby("valid_time").agg(fc=("fc", "mean"), obs=("obs", "mean")).reset_index()
+    ts = (
+        sub.groupby("valid_time")
+        .agg(fc=("fc", "mean"), obs=("obs", "mean"))
+        .reset_index()
+    )
     ts.sort_values("valid_time", inplace=True)
     fig, ax = plt.subplots(figsize=(13, 5))
-    ax.plot(ts["valid_time"], ts["obs"], "-o", ms=3, color="#222", label="observed (domain mean)")
-    ax.plot(ts["valid_time"], ts["fc"], "-o", ms=3, color="#d1495b", label=f"IFS-control forecast (lead ≤ {max_lead} h)")
+    ax.plot(
+        ts["valid_time"],
+        ts["obs"],
+        "-o",
+        ms=3,
+        color="#222",
+        label="observed (domain mean)",
+    )
+    ax.plot(
+        ts["valid_time"],
+        ts["fc"],
+        "-o",
+        ms=3,
+        color="#d1495b",
+        label=f"IFS-control forecast (lead ≤ {max_lead} h)",
+    )
     for d in cfg.event_days:
-        ax.axvspan(pd.Timestamp(d), pd.Timestamp(d) + pd.Timedelta(days=1), color="#ffd5dd", alpha=0.5, zorder=0)
+        ax.axvspan(
+            pd.Timestamp(d),
+            pd.Timestamp(d) + pd.Timedelta(days=1),
+            color="#ffd5dd",
+            alpha=0.5,
+            zorder=0,
+        )
     ax.set_ylabel("10 m wind speed [m/s]")
-    ax.set_title("Domain-mean 10 m wind speed: IFS-control vs observations (event days shaded)")
+    ax.set_title(
+        "Domain-mean 10 m wind speed: IFS-control vs observations (event days shaded)"
+    )
     ax.legend()
     ax.grid(alpha=0.3)
     out = cfg.figures_dir / fname
@@ -213,29 +256,63 @@ def plot_bias_rmse_timeseries(
     daily = _agg(sub, "valid_day").sort_values("valid_day")
 
     fig, axes = plt.subplots(2, 1, figsize=(14, 8), sharex=True)
-    event_set = set(cfg.event_days)
     for d in cfg.event_days:
         for a in axes:
-            a.axvspan(pd.Timestamp(d), pd.Timestamp(d) + pd.Timedelta(days=1),
-                      color="#ffd5dd", alpha=0.6, zorder=0)
+            a.axvspan(
+                pd.Timestamp(d),
+                pd.Timestamp(d) + pd.Timedelta(days=1),
+                color="#ffd5dd",
+                alpha=0.6,
+                zorder=0,
+            )
 
     # Bias panel.
     axes[0].axhline(0, color="k", lw=0.8)
-    axes[0].plot(ts["valid_time"], ts["bias"], "-", lw=0.8, color="#4a7ba6",
-                 alpha=0.6, label="3-hourly bias")
-    axes[0].plot(daily["valid_day"] + pd.Timedelta(hours=12), daily["bias"], "-o",
-                 ms=4, lw=2, color="#1f4e79", label="daily-mean bias")
+    axes[0].plot(
+        ts["valid_time"],
+        ts["bias"],
+        "-",
+        lw=0.8,
+        color="#4a7ba6",
+        alpha=0.6,
+        label="3-hourly bias",
+    )
+    axes[0].plot(
+        daily["valid_day"] + pd.Timedelta(hours=12),
+        daily["bias"],
+        "-o",
+        ms=4,
+        lw=2,
+        color="#1f4e79",
+        label="daily-mean bias",
+    )
     axes[0].set_ylabel("Bias fc − obs [m/s]")
-    axes[0].set_title(f"First-{max_lead}h IFS-control 10 m wind bias & RMSE over the window "
-                      "(event days shaded)")
+    axes[0].set_title(
+        f"First-{max_lead}h IFS-control 10 m wind bias & RMSE over the window "
+        "(event days shaded)"
+    )
     axes[0].legend(loc="upper right")
     axes[0].grid(alpha=0.3)
 
     # RMSE panel.
-    axes[1].plot(ts["valid_time"], ts["rmse"], "-", lw=0.8, color="#d1a15b",
-                 alpha=0.6, label="3-hourly RMSE")
-    axes[1].plot(daily["valid_day"] + pd.Timedelta(hours=12), daily["rmse"], "-o",
-                 ms=4, lw=2, color="#b3541e", label="daily-mean RMSE")
+    axes[1].plot(
+        ts["valid_time"],
+        ts["rmse"],
+        "-",
+        lw=0.8,
+        color="#d1a15b",
+        alpha=0.6,
+        label="3-hourly RMSE",
+    )
+    axes[1].plot(
+        daily["valid_day"] + pd.Timedelta(hours=12),
+        daily["rmse"],
+        "-o",
+        ms=4,
+        lw=2,
+        color="#b3541e",
+        label="daily-mean RMSE",
+    )
     axes[1].set_ylabel("RMSE [m/s]")
     axes[1].set_xlabel("Valid time (UTC)")
     axes[1].legend(loc="upper right")
@@ -259,12 +336,14 @@ def plot_event_day_bias_maps(
     sub = pairs[(pairs["is_event"]) & (pairs["lead_hours"] <= max_lead)]
     days = list(cfg.event_days)
     per_day = {
-        d: sub[sub["valid_day"] == d].groupby("stnid").agg(
-            lat=("lat", "first"), lon=("lon", "first"), bias=("error", "mean")
-        )
+        d: sub[sub["valid_day"] == d]
+        .groupby("stnid")
+        .agg(lat=("lat", "first"), lon=("lon", "first"), bias=("error", "mean"))
         for d in days
     }
-    all_bias = np.concatenate([g["bias"].to_numpy() for g in per_day.values() if len(g)])
+    all_bias = np.concatenate(
+        [g["bias"].to_numpy() for g in per_day.values() if len(g)]
+    )
     vmax = max(1.0, float(np.nanpercentile(np.abs(all_bias), 95)))
 
     fig = plt.figure(figsize=(6 * len(days), 6))
@@ -273,13 +352,23 @@ def plot_event_day_bias_maps(
         ax, kw = _map_ax(fig, cfg, subplot=(1, len(days), j))
         g = per_day[d]
         sc = ax.scatter(
-            g["lon"], g["lat"], c=g["bias"], cmap="RdBu_r", vmin=-vmax, vmax=vmax,
-            s=70, edgecolor="k", linewidth=0.4, **kw,
+            g["lon"],
+            g["lat"],
+            c=g["bias"],
+            cmap="RdBu_r",
+            vmin=-vmax,
+            vmax=vmax,
+            s=70,
+            edgecolor="k",
+            linewidth=0.4,
+            **kw,
         )
         ax.set_title(f"{d}  (mean bias {g['bias'].mean():+.2f} m/s, n={len(g)})")
     cb = fig.colorbar(sc, ax=fig.axes, shrink=0.7, pad=0.02)
     cb.set_label("Mean forecast error  (fc − obs)  [m/s]\nblue = under-forecast")
-    fig.suptitle(f"Per-station 10 m wind bias by event day (lead ≤ {max_lead} h)", y=1.02)
+    fig.suptitle(
+        f"Per-station 10 m wind bias by event day (lead ≤ {max_lead} h)", y=1.02
+    )
     out = cfg.figures_dir / fname
     fig.savefig(out, dpi=130, bbox_inches="tight")
     plt.close(fig)
@@ -296,14 +385,18 @@ def plot_bias_event_vs_baseline(
     under-forecast that appears only on the event days.
     """
     sub = pairs[pairs["lead_hours"] <= max_lead]
-    base = sub[~sub["is_event"]].groupby("stnid").agg(
-        lat=("lat", "first"), lon=("lon", "first"), base=("error", "mean")
+    base = (
+        sub[~sub["is_event"]]
+        .groupby("stnid")
+        .agg(lat=("lat", "first"), lon=("lon", "first"), base=("error", "mean"))
     )
     ev = sub[sub["is_event"]].groupby("stnid").agg(ev=("error", "mean"))
     g = base.join(ev, how="inner").dropna()
     g["diff"] = g["ev"] - g["base"]
 
-    scale = max(0.5, float(np.nanpercentile(np.abs(np.concatenate([g["base"], g["ev"]])), 95)))
+    scale = max(
+        0.5, float(np.nanpercentile(np.abs(np.concatenate([g["base"], g["ev"]])), 95))
+    )
     dscale = max(0.5, float(np.nanpercentile(np.abs(g["diff"]), 95)))
     edge = 0.4 if s >= 40 else 0.15
 
@@ -316,8 +409,16 @@ def plot_bias_event_vs_baseline(
     for j, (col, label, vmax, cmap) in enumerate(panels, start=1):
         ax, kw = _map_ax(fig, cfg, subplot=(1, 3, j))
         sc = ax.scatter(
-            g["lon"], g["lat"], c=g[col], cmap=cmap, vmin=-vmax, vmax=vmax,
-            s=s, edgecolor="k", linewidth=edge, **kw,
+            g["lon"],
+            g["lat"],
+            c=g[col],
+            cmap=cmap,
+            vmin=-vmax,
+            vmax=vmax,
+            s=s,
+            edgecolor="k",
+            linewidth=edge,
+            **kw,
         )
         cb = fig.colorbar(sc, ax=ax, shrink=0.75, pad=0.03)
         cb.set_label(f"{label}  [m/s]\nblue = under-forecast")
@@ -344,7 +445,9 @@ def plot_snapshot(
     vt = pd.Timestamp(valid_time)
     snap = pairs[pairs["valid_time"] == vt].sort_values("lead_hours")
     snap = snap.drop_duplicates("stnid", keep="first")  # smallest lead per station
-    wind_max = max(1.0, float(np.nanpercentile(np.concatenate([snap["obs"], snap["fc"]]), 98)))
+    wind_max = max(
+        1.0, float(np.nanpercentile(np.concatenate([snap["obs"], snap["fc"]]), 98))
+    )
     emax = max(1.0, float(np.nanpercentile(np.abs(snap["error"]), 95)))
 
     fig = plt.figure(figsize=(19, 6))
@@ -356,8 +459,16 @@ def plot_snapshot(
     for j, (col, label, cmap, vmin, vmax) in enumerate(panels, start=1):
         ax, kw = _map_ax(fig, cfg, subplot=(1, 3, j))
         sc = ax.scatter(
-            snap["lon"], snap["lat"], c=snap[col], cmap=cmap, vmin=vmin, vmax=vmax,
-            s=75, edgecolor="k", linewidth=0.4, **kw,
+            snap["lon"],
+            snap["lat"],
+            c=snap[col],
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+            s=75,
+            edgecolor="k",
+            linewidth=0.4,
+            **kw,
         )
         cb = fig.colorbar(sc, ax=ax, shrink=0.75, pad=0.03)
         cb.set_label(label)
@@ -384,15 +495,24 @@ def plot_under_forecast_frequency(
     """
     sub = pairs[(pairs["is_event"]) & (pairs["lead_hours"] <= max_lead)]
     g = sub.groupby("stnid").agg(
-        lat=("lat", "first"), lon=("lon", "first"),
+        lat=("lat", "first"),
+        lon=("lon", "first"),
         frac_under=("error", lambda e: float((e < 0).mean())),
         n=("error", "size"),
     )
     fig = plt.figure(figsize=(9, 8))
     ax, kw = _map_ax(fig, cfg)
     sc = ax.scatter(
-        g["lon"], g["lat"], c=100 * g["frac_under"], cmap="OrRd", vmin=0, vmax=100,
-        s=90, edgecolor="k", linewidth=0.4, **kw,
+        g["lon"],
+        g["lat"],
+        c=100 * g["frac_under"],
+        cmap="OrRd",
+        vmin=0,
+        vmax=100,
+        s=90,
+        edgecolor="k",
+        linewidth=0.4,
+        **kw,
     )
     cb = fig.colorbar(sc, ax=ax, shrink=0.8, pad=0.05)
     cb.set_label("Share of event-day times under-forecast [%]")

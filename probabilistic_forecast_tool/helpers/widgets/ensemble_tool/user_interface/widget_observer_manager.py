@@ -73,7 +73,9 @@ class WidgetObserverManager:
                 )
 
         if "model_cb_custom" in self.widgets:
-            self.widgets["model_cb_custom"].observe(on_custom_checkbox_change, names="value")
+            self.widgets["model_cb_custom"].observe(
+                on_custom_checkbox_change, names="value"
+            )
 
     def _setup_data_source_observer(self):
         """Set up observer for data source selection changes.
@@ -125,7 +127,9 @@ class WidgetObserverManager:
         self.widgets["select_all_steps"].on_click(self._on_select_all_steps)
         self.widgets["deselect_all_steps"].on_click(self._on_deselect_all_steps)
         self.widgets["steps"].observe(self._on_steps_change, names="value")
-        self.widgets["step_frequency"].observe(self._on_step_frequency_change, names="value")
+        self.widgets["step_frequency"].observe(
+            self._on_step_frequency_change, names="value"
+        )
 
     def _on_select_all_steps(self, *_args):
         """Handle select all steps button click.
@@ -906,11 +910,15 @@ class WidgetObserverManager:
             "parameter_selector": widgets_dict["parameter_selector"],
             "unit_selector": widgets_dict["unit_selector"],
             "step_selector": widgets_dict["step_selector"],
-            "precip_accumulation_selector": widgets_dict.get("precip_accumulation_selector"),
+            "precip_accumulation_selector": widgets_dict.get(
+                "precip_accumulation_selector"
+            ),
             "palette_selector": widgets_dict["palette_selector"],
             "unit_container": widgets_dict["unit_container"],
             "step_container": widgets_dict["step_container"],
-            "precip_accumulation_container": widgets_dict.get("precip_accumulation_container"),
+            "precip_accumulation_container": widgets_dict.get(
+                "precip_accumulation_container"
+            ),
             "palette_container": widgets_dict["palette_container"],
             "clear_btn": widgets_dict["clear_btn"],
             "refresh_btn": widgets_dict["refresh_btn"],
@@ -1186,11 +1194,16 @@ class WidgetObserverManager:
         """
         steps_set = set(available_steps)
         valid_steps = [
-            s for s in available_steps
+            s
+            for s in available_steps
             if s >= precip_accumulation and (s - precip_accumulation) in steps_set
         ]
         step_options = [(f"T+{step}h", step) for step in valid_steps]
-        default_step = valid_steps[0] if valid_steps else (available_steps[0] if available_steps else precip_accumulation)
+        default_step = (
+            valid_steps[0]
+            if valid_steps
+            else (available_steps[0] if available_steps else precip_accumulation)
+        )
         return step_options, default_step
 
     def _get_standard_step_options(self, available_steps):

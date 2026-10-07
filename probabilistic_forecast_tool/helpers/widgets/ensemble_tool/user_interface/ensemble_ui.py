@@ -81,7 +81,9 @@ class EnsembleUI:
         self.auto_plot_unit = "celsius"
         self.auto_plot_step = 48
         self.auto_plot_palette = 1
-        self.auto_plot_precip_accumulation = 24  # default accumulation for precip stamps
+        self.auto_plot_precip_accumulation = (
+            24  # default accumulation for precip stamps
+        )
 
     def _initialize_ui_components(self):
         """Initialize all user interface components.
@@ -215,7 +217,13 @@ class EnsembleUI:
         if plot_type == "cdf":
             return base_params + ["analysis_date", "days_back", "forecast_times"]
         elif plot_type == "meteogram":
-            return base_params + ["forecast_date", "time", "steps", "step_frequency", "include_control"]
+            return base_params + [
+                "forecast_date",
+                "time",
+                "steps",
+                "step_frequency",
+                "include_control",
+            ]
         else:
             return base_params + ["forecast_date", "time", "steps", "step_frequency"]
 
@@ -875,11 +883,17 @@ class EnsembleUI:
         selected_models = config["parameters"].get("selected_models", [])
         if "custom" in selected_models:
             if "custom_class" in self.widgets:
-                config["parameters"]["custom_class"] = self.widgets["custom_class"].value.strip()
+                config["parameters"]["custom_class"] = self.widgets[
+                    "custom_class"
+                ].value.strip()
             if "custom_expver" in self.widgets:
-                config["parameters"]["custom_expver"] = self.widgets["custom_expver"].value.strip()
+                config["parameters"]["custom_expver"] = self.widgets[
+                    "custom_expver"
+                ].value.strip()
             if "custom_include_cf" in self.widgets:
-                config["parameters"]["custom_include_cf"] = self.widgets["custom_include_cf"].value
+                config["parameters"]["custom_include_cf"] = self.widgets[
+                    "custom_include_cf"
+                ].value
 
     def _collect_area_parameter(self, config):
         """Collect area boundary parameters.
@@ -923,7 +937,11 @@ class EnsembleUI:
 
         """
         # Always store the step_frequency so retrieval can enforce it per model
-        frequency = self.widgets["step_frequency"].value if "step_frequency" in self.widgets else 1
+        frequency = (
+            self.widgets["step_frequency"].value
+            if "step_frequency" in self.widgets
+            else 1
+        )
         config["parameters"]["step_frequency"] = frequency
 
         step_range = self.widgets["steps"].value

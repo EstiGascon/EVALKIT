@@ -140,7 +140,9 @@ class PlumesPlotting:
         """
         quantile_data = self._calculate_quantile_shading(ensemble_ts)
 
-        forecast_datetime = self._parse_datetime_with_hour(metadata["date"], metadata["time"])
+        forecast_datetime = self._parse_datetime_with_hour(
+            metadata["date"], metadata["time"]
+        )
 
         shading_bands = [
             {
@@ -203,9 +205,7 @@ class PlumesPlotting:
                     legendgroup=band["legendgroup"],
                     showlegend=False,
                     hovertemplate=hover_template,
-                    customdata=list(
-                        zip(band["lower"], band["upper"], strict=False)
-                    ),
+                    customdata=list(zip(band["lower"], band["upper"], strict=False)),
                 )
             )
 
@@ -254,6 +254,7 @@ class PlumesPlotting:
                 # earthkit >=0.17: MaskFieldList.to_xarray() is abstract.
                 # Convert to concrete SimpleFieldList first.
                 from earthkit.data import FieldList as _EkFL
+
                 xr_data = _EkFL.from_fields(list(data)).to_xarray()
         else:
             xr_data = data
@@ -406,7 +407,9 @@ class PlumesPlotting:
             (start_time, end_time)
 
         """
-        init_datetime = self._parse_datetime_with_hour(metadata["date"], metadata["time"])
+        init_datetime = self._parse_datetime_with_hour(
+            metadata["date"], metadata["time"]
+        )
 
         forecast_steps = [int(step) for step in metadata["steps"]]
         start_time = init_datetime + timedelta(hours=forecast_steps[0])
@@ -535,13 +538,16 @@ class PlumesPlotting:
         import xarray as xr  # noqa: PLC0415
 
         if hasattr(data_source, "sel"):
+
             def _sel_to_xarray(ds, param):
                 sel = ds.sel({"parameter.variable": param})
                 try:
                     return sel.to_xarray()
                 except NotImplementedError:
                     from earthkit.data import FieldList as _EkFL
+
                     return _EkFL.from_fields(list(sel)).to_xarray()
+
             u_xr = _sel_to_xarray(data_source, "10u")
             v_xr = _sel_to_xarray(data_source, "10v")
         else:
@@ -594,12 +600,17 @@ class PlumesPlotting:
 
         # Non-earthkit data: fall back to full xarray path
         import xarray as xr  # noqa: PLC0415
+
         if not hasattr(data_source, "sel") or isinstance(
             data_source, xr.Dataset | xr.DataArray
         ):
             data = self._load_and_select_data(data_source, parameter)
             point = self._extract_nearest_gridpoint(data, lat, lon)
-            return np.squeeze(point.values) if hasattr(point, "values") else np.squeeze(point)
+            return (
+                np.squeeze(point.values)
+                if hasattr(point, "values")
+                else np.squeeze(point)
+            )
 
         # Select parameter from FieldList
         selected = data_source.sel({"parameter.variable": parameter})
@@ -617,6 +628,7 @@ class PlumesPlotting:
                     pass
             if manual_fields:
                 from earthkit.data import FieldList as _EkFL
+
                 selected = _EkFL.from_fields(manual_fields)
         if len(selected) == 0:
             # Collect diagnostic info for debugging
@@ -637,7 +649,11 @@ class PlumesPlotting:
         # Find nearest gridpoint index from the first field
         first_field = selected[0]
         idx, _ = nearest_point_haversine(
-            [lat, lon], (first_field.geography.latitudes().flatten(), first_field.geography.longitudes().flatten())
+            [lat, lon],
+            (
+                first_field.geography.latitudes().flatten(),
+                first_field.geography.longitudes().flatten(),
+            ),
         )
 
         # Collect (step, number) → value for every field
@@ -713,6 +729,10 @@ class PlumesPlotting:
         forecast_type : str, optional
             Forecast to use as control: "cf" (control) or "fc" (high-res)
             Default: "cf"
+        model_class : str, optional
+            Model key used for trace labels and the title
+        step_frequency : int, optional
+            Keep only steps that are multiples of this value (None = all)
 
         Returns
         -------
@@ -728,15 +748,21 @@ class PlumesPlotting:
 
         metadata = forecast_data[forecast_type]["metadata"]
 
-        init_datetime = self._parse_datetime_with_hour(metadata["date"], metadata["time"])
+        init_datetime = self._parse_datetime_with_hour(
+            metadata["date"], metadata["time"]
+        )
 
         forecast_steps = [int(step) for step in metadata["steps"]]
         time_axis = [init_datetime + timedelta(hours=step) for step in forecast_steps]
 
         # Compute step frequency filter indices on the ORIGINAL steps
         if step_frequency and step_frequency > 1:
-            keep_idx = [i for i, s in enumerate(forecast_steps) if s % step_frequency == 0]
-            print(f"[DEBUG create_plumes_plot] keep_idx kept {len(keep_idx)}/{len(forecast_steps)} steps")
+            keep_idx = [
+                i for i, s in enumerate(forecast_steps) if s % step_frequency == 0
+            ]
+            print(
+                f"[DEBUG create_plumes_plot] keep_idx kept {len(keep_idx)}/{len(forecast_steps)} steps"
+            )
         else:
             keep_idx = None
         # n_orig_steps used for dimension detection before filtering
@@ -763,12 +789,15 @@ class PlumesPlotting:
                 control_values = control_values[valid_idx]
                 time_axis_ctrl = [time_axis[i] for i in valid_idx]
             else:
-                time_axis_ctrl = time_axis[:len(control_values)]
+                time_axis_ctrl = time_axis[: len(control_values)]
             # Use filtered time_axis going forward
             time_axis = time_axis_ctrl
 
             control_ts, _ = self.styling_config.transform_data_and_levels(
-                control_values, parameter, [], target_unit,
+                control_values,
+                parameter,
+                [],
+                target_unit,
                 model_class=model_class,
             )
 
@@ -811,7 +840,10 @@ class PlumesPlotting:
                 ensemble_values = ensemble_values[valid_idx]
 
             ensemble_ts, _ = self.styling_config.transform_data_and_levels(
-                ensemble_values, parameter, [], target_unit,
+                ensemble_values,
+                parameter,
+                [],
+                target_unit,
                 model_class=model_class,
             )
 
@@ -864,7 +896,9 @@ class PlumesPlotting:
 
         # Add control forecast
         if control_ts is not None:
-            forecast_datetime = self._parse_datetime_with_hour(metadata["date"], metadata["time"])
+            forecast_datetime = self._parse_datetime_with_hour(
+                metadata["date"], metadata["time"]
+            )
 
             customdata = [
                 int((time_point - forecast_datetime).total_seconds() / 3600)
@@ -978,7 +1012,9 @@ class PlumesPlotting:
                 "showline": True,
                 "linecolor": "black",
                 "linewidth": 1,
-                "rangemode": "tozero" if self._is_precipitation_param(parameter) else "normal",
+                "rangemode": "tozero"
+                if self._is_precipitation_param(parameter)
+                else "normal",
             },
             width=figsize[0],
             height=figsize[1],

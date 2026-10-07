@@ -87,7 +87,9 @@ class StampsPlotting:
 
         return False
 
-    def _derive_wind_speed_from_components(self, dataset, step, is_pf=False, max_members=None):
+    def _derive_wind_speed_from_components(
+        self, dataset, step, is_pf=False, max_members=None
+    ):
         """Compute 10 m wind speed (m/s) from U and V components.
 
         Selects ``10u`` and ``10v`` at the requested step and returns a list
@@ -105,6 +107,7 @@ class StampsPlotting:
 
         Returns:
             List of xr.DataArray on success, or an empty list on failure.
+
         """
         try:
             u_fields = dataset.sel(step=step, shortName="10u")
@@ -114,7 +117,9 @@ class StampsPlotting:
             return []
 
         if len(u_fields) == 0 or len(v_fields) == 0:
-            print(f"[stamps] _derive_wind_speed: 10u({len(u_fields)}) or 10v({len(v_fields)}) not found")
+            print(
+                f"[stamps] _derive_wind_speed: 10u({len(u_fields)}) or 10v({len(v_fields)}) not found"
+            )
             return []
 
         # Limit members for PF
@@ -139,9 +144,14 @@ class StampsPlotting:
                             u_xr = u_xr[list(u_xr.data_vars)[0]]
                         ws_values = np.sqrt(
                             np.asarray(u_xr.values) ** 2
-                            + np.asarray(v_field.to_xarray()[list(v_field.to_xarray().data_vars)[0]].values
-                                         if isinstance(v_field.to_xarray(), xr.Dataset)
-                                         else v_field.to_xarray()) ** 2
+                            + np.asarray(
+                                v_field.to_xarray()[
+                                    list(v_field.to_xarray().data_vars)[0]
+                                ].values
+                                if isinstance(v_field.to_xarray(), xr.Dataset)
+                                else v_field.to_xarray()
+                            )
+                            ** 2
                         )
                         ws_da = u_xr.copy(data=ws_values)
                         ws_da.name = "ws"
@@ -151,7 +161,7 @@ class StampsPlotting:
                         # No xarray available — build from lat/lon
                         lats = np.asarray(u_field.geography.latitudes()).flatten()
                         lons = np.asarray(u_field.geography.longitudes()).flatten()
-                        ws_values = np.sqrt(u_arr ** 2 + v_arr ** 2)
+                        ws_values = np.sqrt(u_arr**2 + v_arr**2)
                         ws_da = xr.DataArray(
                             ws_values.reshape(lats.shape),
                             coords={"latitude": lats, "longitude": lons},
@@ -162,20 +172,24 @@ class StampsPlotting:
                 elif isinstance(u_field, xr.DataArray):
                     u_xr = u_field
                     v_xr = v_field
-                    ws_values = np.sqrt(u_xr.values ** 2 + v_xr.values ** 2)
+                    ws_values = np.sqrt(u_xr.values**2 + v_xr.values**2)
                     ws_da = u_xr.copy(data=ws_values)
                     ws_da.name = "ws"
                     ws_da.attrs["units"] = "m s**-1"
                     ws_da.attrs.pop("GRIB_units", None)
                 else:
-                    print(f"[stamps] _derive_wind_speed: unknown field type {type(u_field)}")
+                    print(
+                        f"[stamps] _derive_wind_speed: unknown field type {type(u_field)}"
+                    )
                     continue
 
                 result.append(ws_da)
             except Exception as exc:
                 print(f"[stamps] _derive_wind_speed: member {i} failed: {exc}")
 
-        print(f"[stamps] _derive_wind_speed: derived {len(result)} wind-speed field(s) from 10u/10v")
+        print(
+            f"[stamps] _derive_wind_speed: derived {len(result)} wind-speed field(s) from 10u/10v"
+        )
         return result
 
     def _get_latlon_and_values(self, field):
@@ -186,6 +200,7 @@ class StampsPlotting:
 
         Returns:
             (lats, lons, vals) as 1-D numpy arrays, or (None, None, None) on failure.
+
         """
         # --- earthkit path (FieldList or GribField) ---
         if hasattr(field, "to_latlon") and hasattr(field, "to_numpy"):
@@ -258,7 +273,12 @@ class StampsPlotting:
             if hasattr(field, "metadata"):
                 try:
                     # Try getting a single GribField (index 0 if FieldList)
-                    f = field[0] if hasattr(field, "__getitem__") and not hasattr(field, "metadata") else field
+                    f = (
+                        field[0]
+                        if hasattr(field, "__getitem__")
+                        and not hasattr(field, "metadata")
+                        else field
+                    )
                     try:
                         f = field[0]
                     except Exception:
@@ -291,12 +311,16 @@ class StampsPlotting:
                     lat_mins.append(float(np.nanmin(lats)))
                     lat_maxs.append(float(np.nanmax(lats)))
         if not lon_mins:
-            print("[stamps] _compute_common_bbox: could not extract coords from any field")
+            print(
+                "[stamps] _compute_common_bbox: could not extract coords from any field"
+            )
             return None
         # Intersection (tightest shared area)
         return (
-            max(lon_mins), min(lon_maxs),
-            max(lat_mins), min(lat_maxs),
+            max(lon_mins),
+            min(lon_maxs),
+            max(lat_mins),
+            min(lat_maxs),
         )
 
     def _regrid_to_common(self, field, parameter_name, target_resolution, bbox):
@@ -310,11 +334,14 @@ class StampsPlotting:
 
         Returns:
             xr.DataArray on the target grid, or original field on failure.
+
         """
         try:
             lats, lons, vals = self._get_latlon_and_values(field)
             if lats is None or len(lats) == 0:
-                print(f"[stamps] _regrid_to_common: no coordinates for {parameter_name}, skipping")
+                print(
+                    f"[stamps] _regrid_to_common: no coordinates for {parameter_name}, skipping"
+                )
                 return field
 
             lon_min, lon_max, lat_min, lat_max = bbox
@@ -359,6 +386,7 @@ class StampsPlotting:
         Returns:
             List of xr.DataArray objects on the common target grid.
             Falls back to the original fields on error.
+
         """
         result = []
         tree = None
@@ -368,8 +396,12 @@ class StampsPlotting:
 
         try:
             lon_min, lon_max, lat_min, lat_max = bbox
-            target_lons = np.arange(lon_min, lon_max + target_resolution * 0.5, target_resolution)
-            target_lats = np.arange(lat_min, lat_max + target_resolution * 0.5, target_resolution)
+            target_lons = np.arange(
+                lon_min, lon_max + target_resolution * 0.5, target_resolution
+            )
+            target_lats = np.arange(
+                lat_min, lat_max + target_resolution * 0.5, target_resolution
+            )
             lon_grid, lat_grid = np.meshgrid(target_lons, target_lats)
             target_shape = lon_grid.shape
             target_points = np.column_stack([lon_grid.ravel(), lat_grid.ravel()])
@@ -379,7 +411,11 @@ class StampsPlotting:
 
         # Fast path: if fields is an earthkit FieldList, read all coords and
         # values in two bulk calls instead of one-per-field.
-        if hasattr(fields, "to_latlon") and hasattr(fields, "to_numpy") and len(fields) > 1:
+        if (
+            hasattr(fields, "to_latlon")
+            and hasattr(fields, "to_numpy")
+            and len(fields) > 1
+        ):
             try:
                 ll = fields[0].to_latlon()
                 lats = np.asarray(ll["lat"]).flatten()
@@ -395,15 +431,19 @@ class StampsPlotting:
 
                 for row in all_vals:
                     interpolated = row[idx].reshape(target_shape)
-                    result.append(xr.DataArray(
-                        interpolated,
-                        coords={"latitude": target_lats, "longitude": target_lons},
-                        dims=["latitude", "longitude"],
-                        name=parameter_name,
-                    ))
+                    result.append(
+                        xr.DataArray(
+                            interpolated,
+                            coords={"latitude": target_lats, "longitude": target_lons},
+                            dims=["latitude", "longitude"],
+                            name=parameter_name,
+                        )
+                    )
                 return result
             except Exception as e:
-                print(f"[stamps] _regrid_batch_to_common bulk path failed ({e}), falling back to per-field")
+                print(
+                    f"[stamps] _regrid_batch_to_common bulk path failed ({e}), falling back to per-field"
+                )
                 result = []
 
         for field in fields:
@@ -422,12 +462,14 @@ class StampsPlotting:
                 _dist, idx = tree.query(target_points, workers=-1)
                 interpolated = vals[idx].reshape(target_shape)
 
-                result.append(xr.DataArray(
-                    interpolated,
-                    coords={"latitude": target_lats, "longitude": target_lons},
-                    dims=["latitude", "longitude"],
-                    name=parameter_name,
-                ))
+                result.append(
+                    xr.DataArray(
+                        interpolated,
+                        coords={"latitude": target_lats, "longitude": target_lons},
+                        dims=["latitude", "longitude"],
+                        name=parameter_name,
+                    )
+                )
             except Exception as e:
                 print(f"[stamps] _regrid_batch_to_common: field failed: {e}")
                 result.append(field)
@@ -451,7 +493,13 @@ class StampsPlotting:
         return nrows, max_cols
 
     def _load_and_regrid_data(
-        self, stamp_ds, parameter, step, max_ensemble_members, regrid, target_resolution,
+        self,
+        stamp_ds,
+        parameter,
+        step,
+        max_ensemble_members,
+        regrid,
+        target_resolution,
         precip_accumulation=None,
     ):
         """Load forecast data and optionally regrid to regular grid.
@@ -476,7 +524,9 @@ class StampsPlotting:
         fc_metadata, cf_metadata = {}, {}
         _sel_errors = []
 
-        print(f"[stamps] _load_and_regrid_data: parameter={parameter!r}, step={step!r} (type={type(step).__name__})")
+        print(
+            f"[stamps] _load_and_regrid_data: parameter={parameter!r}, step={step!r} (type={type(step).__name__})"
+        )
 
         # Parameters that can be derived from U/V wind components when not
         # available as a native GRIB field (e.g. AIFS-ENS does not store 'ws').
@@ -493,9 +543,13 @@ class StampsPlotting:
                 elif parameter in _DERIVED_FROM_UV:
                     fc_data = self._derive_wind_speed_from_components(fc_dataset, step)
                     if not fc_data:
-                        _sel_errors.append(f"fc: sel(step={step}, shortName={parameter}) returned 0 fields; 10u/10v derivation also failed")
+                        _sel_errors.append(
+                            f"fc: sel(step={step}, shortName={parameter}) returned 0 fields; 10u/10v derivation also failed"
+                        )
                 else:
-                    _sel_errors.append(f"fc: sel(step={step}, shortName={parameter}) returned 0 fields")
+                    _sel_errors.append(
+                        f"fc: sel(step={step}, shortName={parameter}) returned 0 fields"
+                    )
             except Exception as e:
                 _sel_errors.append(f"fc: {e}")
 
@@ -510,9 +564,13 @@ class StampsPlotting:
                 elif parameter in _DERIVED_FROM_UV:
                     cf_data = self._derive_wind_speed_from_components(cf_dataset, step)
                     if not cf_data:
-                        _sel_errors.append(f"cf: sel(step={step}, shortName={parameter}) returned 0 fields; 10u/10v derivation also failed")
+                        _sel_errors.append(
+                            f"cf: sel(step={step}, shortName={parameter}) returned 0 fields; 10u/10v derivation also failed"
+                        )
                 else:
-                    _sel_errors.append(f"cf: sel(step={step}, shortName={parameter}) returned 0 fields")
+                    _sel_errors.append(
+                        f"cf: sel(step={step}, shortName={parameter}) returned 0 fields"
+                    )
             except Exception as e:
                 _sel_errors.append(f"cf: {e}")
 
@@ -532,13 +590,19 @@ class StampsPlotting:
                         pf_dataset, step, is_pf=True, max_members=max_ensemble_members
                     )
                     if not pf_data:
-                        _sel_errors.append(f"pf: sel(step={step}, shortName={parameter}) returned 0 fields; 10u/10v derivation also failed")
+                        _sel_errors.append(
+                            f"pf: sel(step={step}, shortName={parameter}) returned 0 fields; 10u/10v derivation also failed"
+                        )
                 else:
-                    _sel_errors.append(f"pf: sel(step={step}, shortName={parameter}) returned 0 fields")
+                    _sel_errors.append(
+                        f"pf: sel(step={step}, shortName={parameter}) returned 0 fields"
+                    )
             except Exception as e:
                 _sel_errors.append(f"pf: {e}")
 
-        print(f"[stamps] sel results: n_fc={len(fc_data)}, n_cf={len(cf_data)}, n_pf={len(pf_data)}, errors={_sel_errors}")
+        print(
+            f"[stamps] sel results: n_fc={len(fc_data)}, n_cf={len(cf_data)}, n_pf={len(pf_data)}, errors={_sel_errors}"
+        )
 
         self._last_sel_errors = _sel_errors
 
@@ -558,13 +622,23 @@ class StampsPlotting:
             if pf_data:
                 all_fields.append(pf_data[0])
 
-            _bbox = self._compute_common_bbox(all_fields, parameter) if all_fields else None
+            _bbox = (
+                self._compute_common_bbox(all_fields, parameter) if all_fields else None
+            )
 
             if _bbox:
                 if fc_data:
-                    fc_data = [self._regrid_to_common(fc_data[0], parameter, target_resolution, _bbox)]
+                    fc_data = [
+                        self._regrid_to_common(
+                            fc_data[0], parameter, target_resolution, _bbox
+                        )
+                    ]
                 if cf_data:
-                    cf_data = [self._regrid_to_common(cf_data[0], parameter, target_resolution, _bbox)]
+                    cf_data = [
+                        self._regrid_to_common(
+                            cf_data[0], parameter, target_resolution, _bbox
+                        )
+                    ]
                 if pf_data:
                     # Batch-regrid all PF members: build the KDTree once (all PF
                     # members share the same source grid) then apply the
@@ -577,20 +651,39 @@ class StampsPlotting:
         # For cumulative precipitation parameters, compute the period accumulation
         # by subtracting the start-step cumulative value from the end-step value.
         _PRECIP_PARAMS = {"tp", "lsp", "cp"}
-        if parameter in _PRECIP_PARAMS and precip_accumulation and precip_accumulation > 0:
+        if (
+            parameter in _PRECIP_PARAMS
+            and precip_accumulation
+            and precip_accumulation > 0
+        ):
             start_step = step - precip_accumulation
             fc_data, cf_data, pf_data = self._apply_precip_accumulation(
-                stamp_ds, parameter, start_step, max_ensemble_members,
-                regrid, target_resolution, _bbox,
-                fc_data, cf_data, pf_data,
+                stamp_ds,
+                parameter,
+                start_step,
+                max_ensemble_members,
+                regrid,
+                target_resolution,
+                _bbox,
+                fc_data,
+                cf_data,
+                pf_data,
             )
 
         return fc_data, cf_data, pf_data, fc_metadata, cf_metadata
 
     def _apply_precip_accumulation(
-        self, stamp_ds, parameter, start_step, max_ensemble_members,
-        regrid, target_resolution, bbox,
-        fc_end, cf_end, pf_end,
+        self,
+        stamp_ds,
+        parameter,
+        start_step,
+        max_ensemble_members,
+        regrid,
+        target_resolution,
+        bbox,
+        fc_end,
+        cf_end,
+        pf_end,
     ):
         """Subtract start-step cumulative values from end-step to give period accumulation.
 
@@ -606,8 +699,9 @@ class StampsPlotting:
             target_resolution: Target resolution used for regridding.
             bbox: Bounding box (lon_min, lon_max, lat_min, lat_max) used for
                 regridding, or None when regrid=False.
-            fc_end, cf_end, pf_end: End-step data (already regridded if
-                regrid=True).
+            fc_end: Deterministic end-step data (already regridded if regrid=True).
+            cf_end: Control end-step data (already regridded if regrid=True).
+            pf_end: Ensemble end-step data (already regridded if regrid=True).
 
         Returns:
             Tuple (fc_data, cf_data, pf_data) containing the period
@@ -626,7 +720,11 @@ class StampsPlotting:
                 selected = ds.sel(step=start_step, shortName=parameter)
                 if len(selected) == 0:
                     return None, f"T+{start_step}h not in {key}"
-                if is_pf and max_ensemble_members and len(selected) > max_ensemble_members:
+                if (
+                    is_pf
+                    and max_ensemble_members
+                    and len(selected) > max_ensemble_members
+                ):
                     selected = selected[:max_ensemble_members]
                 return selected, None
             except Exception as e:
@@ -648,16 +746,29 @@ class StampsPlotting:
         # Regrid start fields onto the same target grid as the end fields.
         if regrid and bbox:
             fc_start = (
-                [self._regrid_to_common(fc_start_raw[0], parameter, target_resolution, bbox)]
-                if fc_start_raw else []
+                [
+                    self._regrid_to_common(
+                        fc_start_raw[0], parameter, target_resolution, bbox
+                    )
+                ]
+                if fc_start_raw
+                else []
             )
             cf_start = (
-                [self._regrid_to_common(cf_start_raw[0], parameter, target_resolution, bbox)]
-                if cf_start_raw else []
+                [
+                    self._regrid_to_common(
+                        cf_start_raw[0], parameter, target_resolution, bbox
+                    )
+                ]
+                if cf_start_raw
+                else []
             )
             pf_start = (
-                self._regrid_batch_to_common(pf_start_raw, parameter, target_resolution, bbox)
-                if pf_start_raw else []
+                self._regrid_batch_to_common(
+                    pf_start_raw, parameter, target_resolution, bbox
+                )
+                if pf_start_raw
+                else []
             )
         else:
             # No-regrid path: convert to DataArray so subtraction is possible.
@@ -681,14 +792,16 @@ class StampsPlotting:
 
         # Ensure pf_end is a plain list so zip works correctly.
         pf_end_list = (
-            list(pf_end) if pf_end is not None and not isinstance(pf_end, list) else (pf_end or [])
+            list(pf_end)
+            if pf_end is not None and not isinstance(pf_end, list)
+            else (pf_end or [])
         )
 
         def _subtract(end_list, start_list):
             if not end_list or not start_list:
                 return end_list
             result = []
-            for ef, sf in zip(end_list, start_list):
+            for ef, sf in zip(end_list, start_list, strict=False):
                 if sf is None:
                     result.append(ef)
                     continue
@@ -823,13 +936,21 @@ class StampsPlotting:
                             try:
                                 if field.metadata("shortName") == parameter:
                                     sv = field.metadata("step")
-                                    steps_with_param.add(int(sv) if sv is not None else None)
+                                    steps_with_param.add(
+                                        int(sv) if sv is not None else None
+                                    )
                             except Exception:
                                 pass
-                        ens_step_info.append(f"{key}: steps={sorted(s for s in steps_with_param if s is not None)[:20]}")
+                        ens_step_info.append(
+                            f"{key}: steps={sorted(s for s in steps_with_param if s is not None)[:20]}"
+                        )
                     except Exception:
                         pass
-            ens_diag = "; ".join(ens_step_info) if ens_step_info else "no ensemble datasets present"
+            ens_diag = (
+                "; ".join(ens_step_info)
+                if ens_step_info
+                else "no ensemble datasets present"
+            )
             raise ValueError(
                 f"No ensemble data (CF/PF) found for parameter={parameter!r} at step={step}. "
                 f"Only the deterministic forecast (FC) has data at this step. "
@@ -858,7 +979,9 @@ class StampsPlotting:
                         )
                     except Exception:
                         pass
-            sel_err_msg = "; ".join(self._last_sel_errors) if self._last_sel_errors else "unknown"
+            sel_err_msg = (
+                "; ".join(self._last_sel_errors) if self._last_sel_errors else "unknown"
+            )
             diag_msg = " | ".join(diag_parts) if diag_parts else "no datasets present"
             raise ValueError(
                 f"No data found for parameter={parameter!r}, step={step!r} "
@@ -918,14 +1041,16 @@ class StampsPlotting:
             plot_labels.append(f"MEM {i + 1:02d}")
             current_position += 1
 
-        transformed_data_0, transformed_levels = self.style_config.transform_data_and_levels(
-            data=plot_data[0].to_xarray()
-            if hasattr(plot_data[0], "to_xarray")
-            else plot_data[0],
-            parameter_name=parameter,
-            levels=style_config["levels"],
-            unit=unit,
-            model_class=model,
+        transformed_data_0, transformed_levels = (
+            self.style_config.transform_data_and_levels(
+                data=plot_data[0].to_xarray()
+                if hasattr(plot_data[0], "to_xarray")
+                else plot_data[0],
+                parameter_name=parameter,
+                levels=style_config["levels"],
+                unit=unit,
+                model_class=model,
+            )
         )
 
         # Transform ALL fields in plot_data (not just the first one).
@@ -949,7 +1074,8 @@ class StampsPlotting:
         # parameter tables (which would use GRIB_shortName to infer native units).
         if style_config.get("param_type") in ("geopotential", "pressure"):
             cleaned = []
-            for da in transformed_plot_data:
+            for item in transformed_plot_data:
+                da = item
                 if isinstance(da, xr.DataArray) and hasattr(da, "attrs"):
                     da = da.copy()
                     da.attrs.pop("units", None)
@@ -1010,12 +1136,8 @@ class StampsPlotting:
                     if isinstance(_da, xr.DataArray):
                         # Drop any extra dims (step, valid_time, …)
                         _da = _da.squeeze(drop=True)
-                        _lat = _da.coords.get(
-                            "latitude", _da.coords.get("lat", None)
-                        )
-                        _lon = _da.coords.get(
-                            "longitude", _da.coords.get("lon", None)
-                        )
+                        _lat = _da.coords.get("latitude", _da.coords.get("lat", None))
+                        _lon = _da.coords.get("longitude", _da.coords.get("lon", None))
                         if _lat is not None and _lon is not None:
                             _ax.contour(
                                 np.asarray(_lon),
@@ -1036,7 +1158,11 @@ class StampsPlotting:
             unit_str = f" ({style_config['unit']})" if style_config["unit"] else ""
             ensemble_info = f" | {n_pf} Ensemble Members" if n_pf > 0 else ""
             _PRECIP_PARAMS = {"tp", "lsp", "cp"}
-            if parameter in _PRECIP_PARAMS and precip_accumulation and precip_accumulation > 0:
+            if (
+                parameter in _PRECIP_PARAMS
+                and precip_accumulation
+                and precip_accumulation > 0
+            ):
                 step_label = f"{precip_accumulation}h Accum ending T+{step}h"
             else:
                 step_label = f"T+{step}h"

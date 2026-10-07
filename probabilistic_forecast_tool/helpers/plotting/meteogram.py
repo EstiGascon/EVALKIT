@@ -75,7 +75,11 @@ class MeteogramPlotting:
 
         if "time" in metadata:
             time_val = metadata["time"]
-            hours = int(str(time_val).split(":")[0]) if ":" in str(time_val) else int(time_val)
+            hours = (
+                int(str(time_val).split(":")[0])
+                if ":" in str(time_val)
+                else int(time_val)
+            )
             reference_time = reference_time + pd.Timedelta(hours=hours)
 
         step_deltas = pd.to_timedelta(steps)
@@ -207,17 +211,21 @@ class MeteogramPlotting:
                     # earthkit >=0.17: sel() on some FieldList types returns a
                     # MaskFieldList whose to_xarray() is abstract. Materialize first.
                     from earthkit.data import FieldList as _EkFL
+
                     xr_data = _EkFL.from_fields(list(selected_data)).to_xarray()
                 except Exception:
                     try:
                         from earthkit.data import FieldList as _EkFL
+
                         xr_data = _EkFL.from_fields(list(selected_data)).to_xarray()
                     except Exception:
                         xr_data = None
             else:
                 xr_data = None
 
-            if xr_data is None or (isinstance(xr_data, xr.Dataset) and not xr_data.data_vars):
+            if xr_data is None or (
+                isinstance(xr_data, xr.Dataset) and not xr_data.data_vars
+            ):
                 raise ValueError(f"Parameter '{parameter}' not found in dataset.")
         else:
             xr_data = (
@@ -250,6 +258,7 @@ class MeteogramPlotting:
 
         """
         if hasattr(data_source, "sel"):
+
             def _sel_to_xarray(ds, param):
                 sel = ds.sel({"parameter.variable": param})
                 if len(sel) == 0:
@@ -258,7 +267,9 @@ class MeteogramPlotting:
                     return sel.to_xarray()
                 except NotImplementedError:
                     from earthkit.data import FieldList as _EkFL
+
                     return _EkFL.from_fields(list(sel)).to_xarray()
+
             u_xr = _sel_to_xarray(data_source, "10u")
             v_xr = _sel_to_xarray(data_source, "10v")
         else:
@@ -364,6 +375,7 @@ class MeteogramPlotting:
                     pass
             if manual_fields:
                 from earthkit.data import FieldList as _EkFL
+
                 selected = _EkFL.from_fields(manual_fields)
         if len(selected) == 0:
             # Collect diagnostic info for debugging
@@ -407,9 +419,7 @@ class MeteogramPlotting:
             xr_data = self._preprocess_data(data_source, parameter)
             return self._extract_nearest_gridpoint(xr_data, lat, lon)
 
-        idx, _ = nearest_point_haversine(
-            [lat, lon], (latlon["lat"], latlon["lon"])
-        )
+        idx, _ = nearest_point_haversine([lat, lon], (latlon["lat"], latlon["lon"]))
 
         # Collect (step, number) → value for every field; skip any that fail.
         step_set = set()
@@ -445,9 +455,7 @@ class MeteogramPlotting:
             return self._extract_nearest_gridpoint(xr_data, lat, lon)
 
         unique_steps = sorted(step_set)
-        step_coord = np.array(
-            [np.timedelta64(int(s), "h") for s in unique_steps]
-        )
+        step_coord = np.array([np.timedelta64(int(s), "h") for s in unique_steps])
 
         if number_set:
             unique_numbers = sorted(number_set)
@@ -691,6 +699,8 @@ class MeteogramPlotting:
             Forecast time
         station_id : str, optional
             Observation station ID
+        model_class : str, optional
+            Model key used to label the title (e.g. 'ifs', 'aifs')
 
         Returns
         -------
@@ -728,7 +738,13 @@ class MeteogramPlotting:
 
         model_label = ""
         if model_class:
-            model_names = {"ifs": "IFS-ENS", "aifs": "AIFS-ENS", "aifs-single": "AIFS-Single", "ifs-4km": "IFS 4.4km", "custom": "Custom"}
+            model_names = {
+                "ifs": "IFS-ENS",
+                "aifs": "AIFS-ENS",
+                "aifs-single": "AIFS-Single",
+                "ifs-4km": "IFS 4.4km",
+                "custom": "Custom",
+            }
             model_label = model_names.get(model_class, model_class.upper())
 
         title_parts = []
@@ -871,6 +887,10 @@ class MeteogramPlotting:
             Plot width in pixels (default: 1200)
         height : int, optional
             Plot height in pixels (default: 600)
+        model_class : str, optional
+            Model key used for trace labels and the title
+        step_frequency : int, optional
+            Keep only steps that are multiples of this value (None = all)
 
         Returns
         -------
@@ -891,7 +911,11 @@ class MeteogramPlotting:
         _OBS_SUPPORTED_PARAMS = {"2t", "tp", "cp", "lsp", "ws"}
 
         if plot_types is None:
-            if "fc" in meteogram_data and "cf" not in meteogram_data and "pf" not in meteogram_data:
+            if (
+                "fc" in meteogram_data
+                and "cf" not in meteogram_data
+                and "pf" not in meteogram_data
+            ):
                 # AIFS-single: only a deterministic fc line
                 plot_types = ["fc_line"]
             else:
@@ -920,7 +944,12 @@ class MeteogramPlotting:
             nearest_station = self._find_nearest_station(meteogram_data, lat, lon)
 
         title = self._generate_plot_title(
-            parameter, lat, lon, forecast_date, forecast_time, nearest_station,
+            parameter,
+            lat,
+            lon,
+            forecast_date,
+            forecast_time,
+            nearest_station,
             model_class=model_class,
         )
 
@@ -942,16 +971,13 @@ class MeteogramPlotting:
         if "cf" in meteogram_data and "cf_line" in plot_types:
             cf_dataset = meteogram_data["cf"]["dataset"]
             cf_metadata = meteogram_data["cf"]["metadata"]
-            cf_point = self._extract_parameter_at_point(
-                cf_dataset, parameter, lat, lon
-            )
+            cf_point = self._extract_parameter_at_point(cf_dataset, parameter, lat, lon)
 
             # Drop any unexpected singleton non-step dimensions (e.g., stray
             # number=0).  'step' is always preserved so _get_absolute_times
             # can find it even when only a single step is present.
             _stray_dims = [
-                d for d in cf_point.dims
-                if d != "step" and cf_point.sizes[d] == 1
+                d for d in cf_point.dims if d != "step" and cf_point.sizes[d] == 1
             ]
             if _stray_dims:
                 cf_point = cf_point.squeeze(_stray_dims, drop=True)
@@ -959,7 +985,10 @@ class MeteogramPlotting:
             cf_point = _filter_by_step_freq(cf_point, step_frequency)
 
             cf_point, _ = self.styling_config.transform_data_and_levels(
-                cf_point, parameter, [], target_unit,
+                cf_point,
+                parameter,
+                [],
+                target_unit,
                 model_class=model_class,
             )
 
@@ -990,9 +1019,7 @@ class MeteogramPlotting:
         if "pf" in meteogram_data and "box" in plot_types:
             pf_dataset = meteogram_data["pf"]["dataset"]
             pf_metadata = meteogram_data["pf"]["metadata"]
-            pf_point = self._extract_parameter_at_point(
-                pf_dataset, parameter, lat, lon
-            )
+            pf_point = self._extract_parameter_at_point(pf_dataset, parameter, lat, lon)
 
             pf_values = np.squeeze(pf_point.values)
             non_singleton_dims = [d for d in pf_point.dims if pf_point.sizes[d] > 1]
@@ -1012,7 +1039,10 @@ class MeteogramPlotting:
             pf_point = _filter_by_step_freq(pf_point, step_frequency)
 
             pf_point, _ = self.styling_config.transform_data_and_levels(
-                pf_point, parameter, [], target_unit,
+                pf_point,
+                parameter,
+                [],
+                target_unit,
                 model_class=model_class,
             )
 
@@ -1023,16 +1053,13 @@ class MeteogramPlotting:
         if "fc" in meteogram_data and "fc_line" in plot_types:
             fc_dataset = meteogram_data["fc"]["dataset"]
             fc_metadata = meteogram_data["fc"]["metadata"]
-            fc_point = self._extract_parameter_at_point(
-                fc_dataset, parameter, lat, lon
-            )
+            fc_point = self._extract_parameter_at_point(fc_dataset, parameter, lat, lon)
 
             # Drop any unexpected singleton non-step dimensions; preserve
             # 'step' always so _get_absolute_times can find it even when only
             # a single step is present.
             _stray_dims = [
-                d for d in fc_point.dims
-                if d != "step" and fc_point.sizes[d] == 1
+                d for d in fc_point.dims if d != "step" and fc_point.sizes[d] == 1
             ]
             if _stray_dims:
                 fc_point = fc_point.squeeze(_stray_dims, drop=True)
@@ -1040,7 +1067,10 @@ class MeteogramPlotting:
             fc_point = _filter_by_step_freq(fc_point, step_frequency)
 
             fc_point, _ = self.styling_config.transform_data_and_levels(
-                fc_point, parameter, [], target_unit,
+                fc_point,
+                parameter,
+                [],
+                target_unit,
                 model_class=model_class,
             )
 
@@ -1050,7 +1080,9 @@ class MeteogramPlotting:
                 "aifs-single": "AIFS-Single Forecast",
                 "ifs-4km": "IFS 4.4km Forecast",
             }
-            _fc_label = _fc_det_names.get(model_class, f"{model_class.upper()} Forecast")
+            _fc_label = _fc_det_names.get(
+                model_class, f"{model_class.upper()} Forecast"
+            )
 
             if self._is_precipitation_param(parameter):
                 fig.add_trace(
@@ -1149,7 +1181,9 @@ class MeteogramPlotting:
                 "ticks": "outside",
                 "ticklen": 5,
                 "tickcolor": "#000000",
-                "rangemode": "tozero" if self._is_precipitation_param(parameter) else "normal",
+                "rangemode": "tozero"
+                if self._is_precipitation_param(parameter)
+                else "normal",
             },
             showlegend=True,
             legend={

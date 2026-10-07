@@ -15,7 +15,6 @@ from __future__ import annotations
 import datetime as dt
 
 import pandas as pd
-
 import plots
 from config import StudyConfig
 
@@ -48,13 +47,14 @@ def _worst_stations(pairs: pd.DataFrame, day: dt.date) -> pd.DataFrame:
 
 
 def _worst_valid_time(pairs: pd.DataFrame, day: dt.date) -> pd.Timestamp:
-    """Valid time on ``day`` with the most negative domain-mean error."""
+    """Return the valid time on ``day`` with the most negative domain-mean error."""
     sub = pairs[(pairs["valid_day"] == day) & (pairs["lead_hours"] <= MAX_LEAD)]
     by_time = sub.groupby("valid_time")["error"].mean()
     return by_time.idxmin()
 
 
 def main() -> None:
+    """Write worst-case tables and maps for the focus day."""
     cfg = StudyConfig()
     pairs = pd.read_parquet(cfg.results_dir / "matched_pairs.parquet")
     pairs["valid_day"] = pd.to_datetime(pairs["valid_time"]).dt.date
@@ -62,7 +62,9 @@ def main() -> None:
     # ---- Worst individual misses on the focus day --------------------------
     misses = _worst_individual_misses(pairs, FOCUS_DAY)
     misses.to_csv(cfg.results_dir / "worst_misses_20260815.csv", index=False)
-    print(f"\n=== Top {TOP_N} single under-forecasts on {FOCUS_DAY} (lead ≤ {MAX_LEAD} h) ===")
+    print(
+        f"\n=== Top {TOP_N} single under-forecasts on {FOCUS_DAY} (lead ≤ {MAX_LEAD} h) ==="
+    )
     print(misses.to_string(index=False))
 
     # ---- Worst stations on the focus day -----------------------------------
@@ -77,9 +79,15 @@ def main() -> None:
 
     # ---- Guidance maps ------------------------------------------------------
     outputs = [
-        plots.plot_event_day_bias_maps(cfg, pairs, "map_bias_by_event_day.png", MAX_LEAD),
-        plots.plot_bias_event_vs_baseline(cfg, pairs, "map_bias_event_vs_baseline.png", MAX_LEAD),
-        plots.plot_under_forecast_frequency(cfg, pairs, "map_under_forecast_frequency.png", MAX_LEAD),
+        plots.plot_event_day_bias_maps(
+            cfg, pairs, "map_bias_by_event_day.png", MAX_LEAD
+        ),
+        plots.plot_bias_event_vs_baseline(
+            cfg, pairs, "map_bias_event_vs_baseline.png", MAX_LEAD
+        ),
+        plots.plot_under_forecast_frequency(
+            cfg, pairs, "map_under_forecast_frequency.png", MAX_LEAD
+        ),
         plots.plot_station_bias_map(
             cfg,
             _worst_stations(pairs, FOCUS_DAY).rename(columns={"bias": "bias"}),

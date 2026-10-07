@@ -15,7 +15,6 @@ from __future__ import annotations
 import sys
 
 import earthkit.data as ekd
-
 import forecasts as F
 import observations as O
 import plots as P
@@ -69,6 +68,7 @@ def retrieve_eu(day, cycle):
 
 
 def main(test: bool = False) -> None:
+    """Retrieve Europe forecasts, match to observations and draw bias maps."""
     dates = EU.init_dates()
     cycles = EU.cycles
     forecasts = []
@@ -93,16 +93,22 @@ def main(test: bool = False) -> None:
     station_ev = V.scores_by_station(pairs, event_only=True)
     outs = [
         P.plot_station_bias_map(
-            EU, station_all,
+            EU,
+            station_all,
             "Mean 10 m wind error — Europe, full period (lead ≤ 24 h)",
-            "map_bias_europe_all.png", s=10,
+            "map_bias_europe_all.png",
+            s=10,
         ),
         P.plot_station_bias_map(
-            EU, station_ev,
+            EU,
+            station_ev,
             "Mean 10 m wind error — Europe, event days (lead ≤ 24 h)",
-            "map_bias_europe_event.png", s=10,
+            "map_bias_europe_event.png",
+            s=10,
         ),
-        P.plot_bias_event_vs_baseline(EU, pairs, "map_bias_europe_event_vs_baseline.png", 24, s=7),
+        P.plot_bias_event_vs_baseline(
+            EU, pairs, "map_bias_europe_event_vs_baseline.png", 24, s=7
+        ),
     ]
     print("\nFigures written:")
     for p in outs:

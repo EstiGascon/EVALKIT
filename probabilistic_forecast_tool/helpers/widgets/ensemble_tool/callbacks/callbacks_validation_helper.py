@@ -169,7 +169,9 @@ class ValidationHelperCallbacks:
             if not params.get("custom_class", "").strip():
                 errors.append("Class is required for Custom RD Experiment (e.g. 'rd')")
             if not params.get("custom_expver", "").strip():
-                errors.append("Expver is required for Custom RD Experiment (e.g. 'h4gv')")
+                errors.append(
+                    "Expver is required for Custom RD Experiment (e.g. 'h4gv')"
+                )
 
         return errors
 

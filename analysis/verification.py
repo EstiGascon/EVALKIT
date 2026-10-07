@@ -12,7 +12,6 @@ import sys
 
 import numpy as np
 import pandas as pd
-
 from config import StudyConfig
 from forecasts import ForecastFields
 
@@ -36,11 +35,14 @@ def build_matched_pairs(
         DataFrame with columns: ``stnid, lat, lon, init_time, valid_time,
         lead_hours, fc, obs, error`` where ``error = fc - obs`` (negative =
         under-forecast).
+
     """
     nearest = _nearest_index_fn(cfg)
 
     # Unique stations and their coordinates.
-    stations = obs.drop_duplicates("stnid")[["stnid", "lat", "lon"]].reset_index(drop=True)
+    stations = obs.drop_duplicates("stnid")[["stnid", "lat", "lon"]].reset_index(
+        drop=True
+    )
 
     # Fast observation lookup keyed by (stnid, valid_time).
     obs_lookup = obs.set_index(["stnid", "valid_time"])["obs"].to_dict()
@@ -51,7 +53,12 @@ def build_matched_pairs(
 
     records: list[dict] = []
     for ff in forecasts:
-        grid_key = (ff.lats.shape[0], float(ff.lats[0]), float(ff.lons[0]), float(ff.lats[-1]))
+        grid_key = (
+            ff.lats.shape[0],
+            float(ff.lats[0]),
+            float(ff.lons[0]),
+            float(ff.lats[-1]),
+        )
         if grid_key not in index_cache:
             idxs = np.empty(len(stations), dtype=int)
             for i, row in stations.iterrows():
@@ -127,7 +134,10 @@ def scores_overall(pairs: pd.DataFrame) -> pd.DataFrame:
 def scores_by_lead(pairs: pd.DataFrame) -> pd.DataFrame:
     """Scores as a function of forecast lead time, event vs baseline."""
     frames = []
-    for label, sub in (("event", pairs[pairs["is_event"]]), ("baseline", pairs[~pairs["is_event"]])):
+    for label, sub in (
+        ("event", pairs[pairs["is_event"]]),
+        ("baseline", pairs[~pairs["is_event"]]),
+    ):
         if sub.empty:
             continue
         g = sub.groupby("lead_hours").apply(_scores, include_groups=False)
@@ -148,7 +158,9 @@ def scores_by_valid_day(pairs: pd.DataFrame, max_lead: int = 24) -> pd.DataFrame
     """Daily scores for short lead times, to show day-to-day behaviour."""
     sub = pairs[pairs["lead_hours"] <= max_lead]
     g = sub.groupby("valid_day").apply(_scores, include_groups=False).reset_index()
-    g["is_event"] = g["valid_day"].apply(lambda d: d in set(pairs.loc[pairs["is_event"], "valid_day"]))
+    g["is_event"] = g["valid_day"].apply(
+        lambda d: d in set(pairs.loc[pairs["is_event"], "valid_day"])
+    )
     return g
 
 
@@ -157,7 +169,10 @@ def scores_by_hour(pairs: pd.DataFrame) -> pd.DataFrame:
     tmp = pairs.copy()
     tmp["hour"] = tmp["valid_time"].dt.hour
     frames = []
-    for label, sub in (("event", tmp[tmp["is_event"]]), ("baseline", tmp[~tmp["is_event"]])):
+    for label, sub in (
+        ("event", tmp[tmp["is_event"]]),
+        ("baseline", tmp[~tmp["is_event"]]),
+    ):
         if sub.empty:
             continue
         g = sub.groupby("hour").apply(_scores, include_groups=False).reset_index()

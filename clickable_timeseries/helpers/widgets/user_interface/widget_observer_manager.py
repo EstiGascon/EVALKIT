@@ -97,8 +97,12 @@ class WidgetObserverManager:
 
                 # Show class/expver inputs only when rd-experiment is selected
                 rd_selected = "rd-experiment" in selected_models
-                self.widgets["rd_class"].layout.display = "block" if rd_selected else "none"
-                self.widgets["rd_expver"].layout.display = "block" if rd_selected else "none"
+                self.widgets["rd_class"].layout.display = (
+                    "block" if rd_selected else "none"
+                )
+                self.widgets["rd_expver"].layout.display = (
+                    "block" if rd_selected else "none"
+                )
 
                 start_date = self.widgets["start_date"].value
 
@@ -251,7 +255,7 @@ class WidgetObserverManager:
                     # Enable browse widgets
                     self.widgets["browse_obs_btn"].disabled = False
                     self.widgets["obs_folder_path_input"].disabled = False
-                    
+
                     # Disable retrieval widgets
                     retrieval_widgets = [
                         "obs_sources",
@@ -265,7 +269,7 @@ class WidgetObserverManager:
                     for widget_name in retrieval_widgets:
                         if widget_name in self.widgets:
                             self.widgets[widget_name].disabled = True
-                            
+
                 elif current_mode == "retrieve":
                     # Enable retrieval widgets
                     retrieval_widgets = [
@@ -329,7 +333,7 @@ class WidgetObserverManager:
                     # Enable browse widgets
                     self.widgets["browse_obs_btn"].disabled = False
                     self.widgets["obs_folder_path_input"].disabled = False
-                    
+
                     # Disable retrieval widgets
                     retrieval_widgets = [
                         "obs_sources",

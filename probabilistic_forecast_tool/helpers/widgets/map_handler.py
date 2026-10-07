@@ -699,6 +699,7 @@ class WeatherMapHandler:
         on_click : callable, optional
             Callback invoked when the marker is clicked.  Receives
             ``station_id``, ``lat``, ``lon`` as keyword arguments.
+
         """
         try:
             station_id = marker_data["station_id"]
@@ -728,15 +729,18 @@ class WeatherMapHandler:
             marker.popup = popup
 
             # Show popup on hover
-            def _on_hover(marker_ref=marker, **kwargs):
+            def _on_hover(marker_ref=marker, **_kwargs):
                 try:
-                    if marker_ref.popup and marker_ref.popup not in self.map_widget.layers:
+                    if (
+                        marker_ref.popup
+                        and marker_ref.popup not in self.map_widget.layers
+                    ):
                         marker_ref.popup.location = marker_ref.location
                         self.map_widget.add(marker_ref.popup)
                 except Exception:
                     pass
 
-            def _on_mouseout(marker_ref=marker, **kwargs):
+            def _on_mouseout(marker_ref=marker, **_kwargs):
                 try:
                     if marker_ref.popup and marker_ref.popup in self.map_widget.layers:
                         self.map_widget.remove(marker_ref.popup)
@@ -747,11 +751,13 @@ class WeatherMapHandler:
             marker.on_mouseout(_on_mouseout)
 
             if on_click is not None:
-                def _on_click(sid=station_id, la=lat, lo=lon, cb=on_click, **kwargs):
+
+                def _on_click(sid=station_id, la=lat, lo=lon, cb=on_click, **_kwargs):
                     try:
                         cb(station_id=sid, lat=la, lon=lo)
                     except Exception:
                         pass
+
                 marker.on_click(_on_click)
 
             self.observation_markers[station_id] = marker

@@ -262,7 +262,9 @@ class SurfaceVariablesMapsRender:
         else:
             try:
                 if step is not None:
-                    field = data.sel({"parameter.variable": parameter_name, "time.step": step})[0]
+                    field = data.sel(
+                        {"parameter.variable": parameter_name, "time.step": step}
+                    )[0]
                 else:
                     field = data.sel({"parameter.variable": parameter_name})[0]
 
@@ -273,7 +275,9 @@ class SurfaceVariablesMapsRender:
 
                 if is_reduced and regrid:
                     if step is not None:
-                        field_data = data.sel({"parameter.variable": parameter_name, "time.step": step})
+                        field_data = data.sel(
+                            {"parameter.variable": parameter_name, "time.step": step}
+                        )
                     else:
                         field_data = data.sel({"parameter.variable": parameter_name})
 
@@ -281,7 +285,9 @@ class SurfaceVariablesMapsRender:
                         field_data, parameter_name, target_resolution=target_resolution
                     )
                 elif step is not None:
-                    data = data.sel({"parameter.variable": parameter_name, "time.step": step}).to_xarray()
+                    data = data.sel(
+                        {"parameter.variable": parameter_name, "time.step": step}
+                    ).to_xarray()
                 else:
                     data = data.sel({"parameter.variable": parameter_name}).to_xarray()
 
@@ -515,7 +521,9 @@ class SurfaceVariablesMapsRender:
                         target_resolution=target_resolution,
                     )
             else:
-                step_data_raw = data.sel({"parameter.variable": parameter_name, "time.step": step})
+                step_data_raw = data.sel(
+                    {"parameter.variable": parameter_name, "time.step": step}
+                )
 
                 if is_reduced and regrid:
                     step_data = self._regrid_to_regular(
@@ -683,7 +691,9 @@ class SurfaceVariablesMapsRender:
 
         """
         if step:
-            data_subset = data.sel({"parameter.variable": parameter_name, "time.step": step})
+            data_subset = data.sel(
+                {"parameter.variable": parameter_name, "time.step": step}
+            )
         else:
             data_subset = data.sel({"parameter.variable": parameter_name})
         chart = ek.plots.Map()

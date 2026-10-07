@@ -128,7 +128,17 @@ class ObservationHandler:
     }
 
     # Known observation parameter names for matching against GEO filenames
-    KNOWN_OBS_PARAMS = ["10fg", "10ff", "mx2t", "mn2t", "tmax", "tmin", "2t", "2d", "tp"]
+    KNOWN_OBS_PARAMS = [
+        "10fg",
+        "10ff",
+        "mx2t",
+        "mn2t",
+        "tmax",
+        "tmin",
+        "2t",
+        "2d",
+        "tp",
+    ]
 
     @staticmethod
     def _extract_obs_parameter_from_geo_files(geo_files):
@@ -146,8 +156,12 @@ class ObservationHandler:
             prefix = parts[0]
             # Try to match against known param names (longest first to avoid
             # partial matches like "2t" matching before "2t" in "2t_24h")
-            for param in sorted(ObservationHandler.KNOWN_OBS_PARAMS, key=len, reverse=True):
-                if prefix == param or (prefix.startswith(param) and prefix[len(param):].isdigit()):
+            for param in sorted(
+                ObservationHandler.KNOWN_OBS_PARAMS, key=len, reverse=True
+            ):
+                if prefix == param or (
+                    prefix.startswith(param) and prefix[len(param) :].isdigit()
+                ):
                     return param
             return prefix
         return None
@@ -164,12 +178,15 @@ class ObservationHandler:
             # Check parameter compatibility
             if selected_param and self.observation_loaded_parameter:
                 expected_obs = self.FORECAST_TO_OBS_PARAM.get(selected_param)
+
                 # Normalise both sides through the alias table so that
                 # e.g. "tmax" and "mx2t" are treated as equivalent.
                 def _normalise(p):
                     return self._OBS_PARAM_ALIASES.get(p, p)
 
-                if expected_obs and _normalise(expected_obs) != _normalise(self.observation_loaded_parameter):
+                if expected_obs and _normalise(expected_obs) != _normalise(
+                    self.observation_loaded_parameter
+                ):
                     StatusMessageHandler.show_obs_warning(
                         self.ui.widgets["obs_info_display"],
                         f"⚠️ Parameter mismatch: loaded observations are for "
@@ -269,12 +286,16 @@ class ObservationHandler:
             # accumulated from the start of the run.
             if method == "cumsum":
                 cumulated = obs_df["forecast_value"].cumsum()
-                return pd.DataFrame({"forecast_value": cumulated.values}, index=cumulated.index)
+                return pd.DataFrame(
+                    {"forecast_value": cumulated.values}, index=cumulated.index
+                )
 
             # Resample to the target period with closed='right' and label='right'
             # so that, e.g., the 24h window ending at 00 UTC is labelled at 00 UTC,
             # matching how forecast daily values are anchored.
-            resampler = obs_df["forecast_value"].resample(period, closed="right", label="right")
+            resampler = obs_df["forecast_value"].resample(
+                period, closed="right", label="right"
+            )
 
             if method == "mean":
                 aggregated = resampler.mean()
@@ -289,7 +310,9 @@ class ObservationHandler:
             if aggregated.empty:
                 return obs_df
 
-            return pd.DataFrame({"forecast_value": aggregated.values}, index=aggregated.index)
+            return pd.DataFrame(
+                {"forecast_value": aggregated.values}, index=aggregated.index
+            )
 
         except Exception as e:
             print(f"⚠️ Observation aggregation failed for {selected_param}: {e}")
@@ -447,8 +470,13 @@ class ObservationHandler:
             # timestep so stale data from previous retrievals in the same folder
             # does not appear first.
             initial_time_index = 0
-            if self.observation_timeseries_df is not None and not self.observation_timeseries_df.empty:
-                initial_time_index = len(self.observation_timeseries_df) - 1  # default: most recent
+            if (
+                self.observation_timeseries_df is not None
+                and not self.observation_timeseries_df.empty
+            ):
+                initial_time_index = (
+                    len(self.observation_timeseries_df) - 1
+                )  # default: most recent
 
             if (
                 self.observation_timeseries_df is not None
@@ -456,11 +484,15 @@ class ObservationHandler:
                 and forecast_time_validation.get("forecast_start") is not None
             ):
                 try:
-                    fc_start = pd.to_datetime(forecast_time_validation["forecast_start"])
+                    fc_start = pd.to_datetime(
+                        forecast_time_validation["forecast_start"]
+                    )
                     # Strip timezone from both sides to avoid comparison errors
                     if hasattr(fc_start, "tz") and fc_start.tz is not None:
                         fc_start = fc_start.tz_convert(None)
-                    obs_timestamps = pd.to_datetime(self.observation_timeseries_df.index)
+                    obs_timestamps = pd.to_datetime(
+                        self.observation_timeseries_df.index
+                    )
                     if obs_timestamps.tz is not None:
                         obs_timestamps = obs_timestamps.tz_convert(None)
                     mask = obs_timestamps >= fc_start
@@ -517,20 +549,21 @@ class ObservationHandler:
         """Map a scalar value to a hex colour using a RdYlBu_r colormap."""
         try:
             from matplotlib import colormaps
+
             cmap = colormaps["RdYlBu_r"]
         except Exception:
             return "#949190"
         denom = vmax - vmin if vmax != vmin else 1.0
         t = max(0.0, min(1.0, (value - vmin) / denom))
         r, g, b, _ = cmap(t)
-        return f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
+        return f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
 
     @staticmethod
     def _build_colorbar_html(vmin, vmax, unit=""):
         """Return an HTML snippet showing a horizontal colourbar legend."""
         try:
             from matplotlib import colormaps
-            import numpy as _np
+
             cmap = colormaps["RdYlBu_r"]
             n = 20
             stops = []
@@ -538,7 +571,9 @@ class ObservationHandler:
                 t = i / n
                 r, g, b, _ = cmap(t)
                 pct = round(t * 100)
-                stops.append(f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x} {pct}%")
+                stops.append(
+                    f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x} {pct}%"
+                )
             gradient = ", ".join(stops)
         except Exception:
             gradient = "#0000ff 0%, #ff0000 100%"
@@ -549,17 +584,20 @@ class ObservationHandler:
             f'<div style="margin:4px 0;font-size:0.8em;color:#444;">'
             f'<span style="font-weight:bold;">Station values{unit_str}</span><br>'
             f'<div style="display:flex;align-items:center;gap:4px;margin-top:3px;">'
-            f'<span>{label_lo}</span>'
+            f"<span>{label_lo}</span>"
             f'<div style="flex:1;height:10px;border-radius:4px;'
-            f'background:linear-gradient(to right,{gradient});'
+            f"background:linear-gradient(to right,{gradient});"
             f'border:1px solid #ccc;"></div>'
-            f'<span>{label_hi}</span>'
-            f'</div></div>'
+            f"<span>{label_hi}</span>"
+            f"</div></div>"
         )
 
     def _get_time_values(self, time_index=0):
         """Return a dict {station_id: value} for a given time index row."""
-        if self.observation_timeseries_df is None or self.observation_timeseries_df.empty:
+        if (
+            self.observation_timeseries_df is None
+            or self.observation_timeseries_df.empty
+        ):
             return None, None
         ts = self.observation_timeseries_df
         if time_index < 0 or time_index >= len(ts):
@@ -602,7 +640,11 @@ class ObservationHandler:
             vmin, vmax = float(scale.min()), float(scale.max())
 
             # Update time label
-            time_label = ts_time.strftime("%Y-%m-%d %H:%M UTC") if hasattr(ts_time, "strftime") else str(ts_time)
+            time_label = (
+                ts_time.strftime("%Y-%m-%d %H:%M UTC")
+                if hasattr(ts_time, "strftime")
+                else str(ts_time)
+            )
             n = len(self.observation_timeseries_df)
             if "obs_time_label" in self.ui.widgets:
                 self.ui.widgets["obs_time_label"].value = (
@@ -618,13 +660,20 @@ class ObservationHandler:
                 self.ui.widgets["obs_colorbar"].layout.display = ""
 
             # Re-colour markers for non-selected stations
-            selected_station_ids = {
-                info["station_id"]
-                for info in self.callbacks.map_handler.selected_points.values()
-                if info.get("type") == "observation"
-            } if self.callbacks.map_handler else set()
+            selected_station_ids = (
+                {
+                    info["station_id"]
+                    for info in self.callbacks.map_handler.selected_points.values()
+                    if info.get("type") == "observation"
+                }
+                if self.callbacks.map_handler
+                else set()
+            )
 
-            for station_id, marker in self.callbacks.map_handler.observation_markers.items():
+            for (
+                station_id,
+                marker,
+            ) in self.callbacks.map_handler.observation_markers.items():
                 if station_id in selected_station_ids:
                     continue  # keep the selection colour
                 val = row.get(station_id, np.nan)
@@ -636,7 +685,10 @@ class ObservationHandler:
                 marker.fill_color = new_color
 
             # Update popup values for visible markers
-            for station_id, marker in self.callbacks.map_handler.observation_markers.items():
+            for (
+                station_id,
+                marker,
+            ) in self.callbacks.map_handler.observation_markers.items():
                 if station_id in selected_station_ids:
                     continue
                 val = row.get(station_id, np.nan)
@@ -646,6 +698,7 @@ class ObservationHandler:
                     si = gdf.loc[station_id]
                     lat, lon = si["latitude"], si["longitude"]
                     import ipywidgets as widgets
+
                     marker.popup = ipyleaflet.Popup(
                         child=widgets.HTML(
                             f'<div style="width:260px;color:black;">'
@@ -653,7 +706,7 @@ class ObservationHandler:
                             f'<p style="margin:2px 0;"><b>Location:</b> {lat:.3f}°N, {lon:.3f}°E</p>'
                             f'<p style="margin:2px 0;"><b>Value at {time_label}:</b> {val_str}</p>'
                             f'<p style="margin:2px 0;font-size:0.9em;"><em>Click to select/deselect</em></p>'
-                            f'</div>'
+                            f"</div>"
                         ),
                         close_button=True,
                         auto_close=True,
@@ -686,7 +739,9 @@ class ObservationHandler:
                     self.observation_timeseries_df.columns
                 )
                 if len(common_cols) > 0:
-                    data_counts = self.observation_timeseries_df[common_cols].count().to_dict()
+                    data_counts = (
+                        self.observation_timeseries_df[common_cols].count().to_dict()
+                    )
 
             # Get values at the initial time step for colour mapping
             row, ts_time = self._get_time_values(time_index)
@@ -709,7 +764,11 @@ class ObservationHandler:
                 if ts_time is not None and hasattr(ts_time, "strftime")
                 else "–"
             )
-            n_times = len(self.observation_timeseries_df) if self.observation_timeseries_df is not None else 0
+            n_times = (
+                len(self.observation_timeseries_df)
+                if self.observation_timeseries_df is not None
+                else 0
+            )
 
             markers = []
             for station_id, station_info in filtered_stations_gdf.iterrows():
@@ -735,11 +794,15 @@ class ObservationHandler:
                     f'<div style="width:280px;color:black;">'
                     f'<h4 style="margin-bottom:10px;">Obs Station {station_id}</h4>'
                     f'<p style="margin:2px 0;"><strong>Location:</strong> {lat:.3f}°N, {lon:.3f}°E</p>'
-                    + (f'<p style="margin:2px 0;"><strong>Elevation:</strong> {elevation:.1f} m</p>' if has_elev else "")
+                    + (
+                        f'<p style="margin:2px 0;"><strong>Elevation:</strong> {elevation:.1f} m</p>'
+                        if has_elev
+                        else ""
+                    )
                     + f'<p style="margin:2px 0;"><strong>Data Points:</strong> {count}</p>'
                     f'<p style="margin:2px 0;"><strong>Value at {time_label}:</strong> {val_str}</p>'
                     f'<p style="margin:2px 0;font-size:0.9em;"><em>Click to select/deselect</em></p>'
-                    f'</div>'
+                    f"</div>"
                 )
 
                 marker = ipyleaflet.CircleMarker(
@@ -783,7 +846,9 @@ class ObservationHandler:
             # Show colorbar if values available
             if has_values and vmin != vmax and "obs_colorbar" in self.ui.widgets:
                 disp_vmin, disp_vmax, unit = self._apply_unit_conversion(vmin, vmax)
-                self.ui.widgets["obs_colorbar"].value = self._build_colorbar_html(disp_vmin, disp_vmax, unit)
+                self.ui.widgets["obs_colorbar"].value = self._build_colorbar_html(
+                    disp_vmin, disp_vmax, unit
+                )
                 self.ui.widgets["obs_colorbar"].layout.display = ""
 
         except Exception as e:
@@ -817,7 +882,11 @@ class ObservationHandler:
                     parts = line.split("\t")
                     try:
                         sid = parts[stnid_col]
-                        val = parts[value_col] if value_col is not None and value_col < len(parts) else None
+                        val = (
+                            parts[value_col]
+                            if value_col is not None and value_col < len(parts)
+                            else None
+                        )
                         if val is not None and val != "3e+38":
                             results[sid] = float(val)
                         else:
@@ -867,9 +936,7 @@ class ObservationHandler:
             all_data = []
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = [
-                    executor.submit(
-                        self._process_single_geo_file, fp, station_id_set
-                    )
+                    executor.submit(self._process_single_geo_file, fp, station_id_set)
                     for fp in geo_files
                 ]
                 for future in futures:
@@ -981,7 +1048,9 @@ class ObservationHandler:
             self.current_filtered_stations = filtered_stations
 
             current_time_index = getattr(self.callbacks, "_obs_time_index", 0)
-            self._create_unified_observation_markers(filtered_stations, time_index=current_time_index)
+            self._create_unified_observation_markers(
+                filtered_stations, time_index=current_time_index
+            )
 
             total_count = len(source_stations)
             filtered_count = len(filtered_stations)

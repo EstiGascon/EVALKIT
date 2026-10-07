@@ -27,7 +27,9 @@ class ObservationsRetriever:
             },
             "10fg": {
                 "supported_periods": [1],
-                "times_map": {1: "00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21 22 23"},
+                "times_map": {
+                    1: "00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21 22 23"
+                },
             },
             "tmax": {"supported_periods": [24], "times_map": {24: "00"}},
             "tmin": {"supported_periods": [24], "times_map": {24: "00"}},
@@ -222,6 +224,7 @@ class ObservationsRetriever:
             # the metview binary from PATH.  Resolve it once from the current
             # shell environment and prepend it so the subprocess always finds it.
             import shutil as _shutil
+
             _metview_bin = _shutil.which("metview")
             if _metview_bin:
                 _metview_dir = os.path.dirname(_metview_bin)

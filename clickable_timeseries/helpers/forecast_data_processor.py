@@ -79,14 +79,16 @@ class ForecastDataProcessor:
 
             temperature_params = ["mx2t", "mn2t"]
             is_temperature = param in temperature_params
-            param_dataset = ds.sel({'parameter.variable': param})
+            param_dataset = ds.sel({"parameter.variable": param})
             if is_temperature:
                 try:
                     steps = param_dataset.metadata("step")
                     if steps and 0 in steps:
-                        param_dataset = param_dataset.new_mask_index(where=lambda f: f.metadata('step') != 0)
+                        param_dataset = param_dataset.new_mask_index(
+                            where=lambda f: f.metadata("step") != 0
+                        )
                 except Exception:
-                    param_dataset = ds.sel({'parameter.variable': param})
+                    param_dataset = ds.sel({"parameter.variable": param})
 
             self.current_param = param
             self.datasets[model] = param_dataset

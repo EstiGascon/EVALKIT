@@ -13,7 +13,6 @@ from dataclasses import dataclass
 
 import earthkit.data as ekd
 import numpy as np
-
 from config import StudyConfig
 
 
@@ -27,6 +26,7 @@ class ForecastFields:
         lons: Flattened grid longitudes (shared by all steps).
         steps: List of forecast steps (hours).
         speed: Dict mapping step (h) -> flattened wind-speed array (m/s).
+
     """
 
     init_time: dt.datetime
@@ -36,7 +36,7 @@ class ForecastFields:
     speed: dict[int, np.ndarray]
 
     def valid_time(self, step: int) -> dt.datetime:
-        """Valid time for a given forecast step."""
+        """Return the valid time for a given forecast step."""
         return self.init_time + dt.timedelta(hours=step)
 
 
@@ -71,6 +71,7 @@ def retrieve_forecast(cfg: StudyConfig, day: dt.date, cycle: str, force: bool = 
 
     Returns:
         An earthkit fieldlist, or ``None`` if the retrieval yielded no fields.
+
     """
     cache = _cache_path(cfg, day, cycle)
     if cache.exists() and not force:
@@ -122,6 +123,7 @@ def derive_wind_speed(ds, day: dt.date, cycle: str) -> ForecastFields | None:
     Returns:
         A :class:`ForecastFields` object, or ``None`` if no complete u/v pair
         was found.
+
     """
     init_time = dt.datetime.strptime(f"{day:%Y%m%d}{cycle}", "%Y%m%d%H%M")
 

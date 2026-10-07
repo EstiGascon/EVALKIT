@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-
 from precip_forecasts import PrecipField
 
 
@@ -57,8 +56,12 @@ def score_summary(field: PrecipField, obs: pd.DataFrame) -> dict:
 
 
 def mass_weighted_lat(
-    lats: np.ndarray, lons: np.ndarray, values: np.ndarray, threshold: float,
-    lon_min: float, lon_max: float,
+    lats: np.ndarray,
+    lons: np.ndarray,
+    values: np.ndarray,
+    threshold: float,
+    lon_min: float,
+    lon_max: float,
 ) -> float:
     """Precipitation-mass-weighted mean latitude above a rain threshold.
 

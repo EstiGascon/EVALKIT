@@ -36,7 +36,7 @@ jobs:
       run: poetry run ruff format --check .
     - name: Run linter (ruff check)
       run: |
-        poetry run ruff check . --format github \
+        poetry run ruff check . --output-format github \
         | tee ruff-report.json
        
     - name: Upload code quality report

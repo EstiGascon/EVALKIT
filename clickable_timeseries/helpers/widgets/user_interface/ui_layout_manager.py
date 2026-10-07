@@ -65,7 +65,7 @@ class UILayoutManager:
         # Model visibility toggle row — reuses the same checkbox widget objects
         # from the Parameter & Analysis section so state stays in sync.
         model_toggle_controls = []
-        for model_key, model_info in self.config_manager.models.items():
+        for model_key in self.config_manager.models:
             model_short = model_key.split("-")[0]
             checkbox_name = f"{model_short}_checkbox"
             if checkbox_name in self.widgets:
@@ -175,7 +175,9 @@ class UILayoutManager:
                         ),
                         self.widgets["param"],
                         self.widgets["model"],
-                        widgets.HBox([self.widgets["rd_class"], self.widgets["rd_expver"]]),
+                        widgets.HBox(
+                            [self.widgets["rd_class"], self.widgets["rd_expver"]]
+                        ),
                     ]
                 ),
                 # Forecast Configuration

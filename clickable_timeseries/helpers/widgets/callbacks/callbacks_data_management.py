@@ -126,8 +126,12 @@ class DataManagement:
                         custom_area=params["area"],
                         grid=params["grid"],
                         custom_steps=selected_steps,
-                        expver=params.get("rd_expver") if model == "rd-experiment" else None,
-                        custom_class=params.get("rd_class") if model == "rd-experiment" else None,
+                        expver=params.get("rd_expver")
+                        if model == "rd-experiment"
+                        else None,
+                        custom_class=params.get("rd_class")
+                        if model == "rd-experiment"
+                        else None,
                     )
 
                     retrieval_results[model] = result
@@ -154,10 +158,14 @@ class DataManagement:
                         if isinstance(result, dict) and "error" in result:
                             error_detail = result["error"]
                             req_params = result.get("request_params", {})
-                            print(f"❌ Failed to retrieve data for {model}: {error_detail}")
+                            print(
+                                f"❌ Failed to retrieve data for {model}: {error_detail}"
+                            )
                             print(f"   Request params: {req_params}")
                         else:
-                            print(f"❌ Failed to retrieve data for {model}: result={result}")
+                            print(
+                                f"❌ Failed to retrieve data for {model}: result={result}"
+                            )
                         retrieval_results[model] = {
                             "error": error_detail or "Unknown error",
                             "request_params": req_params,
@@ -256,7 +264,7 @@ class DataManagement:
             self.ui.widgets["mars_info_display"].value = f"""
                 <div style="background-color: #FFF3E0; padding: 15px; border-radius: 8px; margin: 10px 0; border-left: 4px solid #FF9800;">
                     <h4 style="margin-top: 0; color: #E65100;">⚠️ Partial Success</h4>
-                    <p><strong>Successful ({successful_retrievals}/{total_models}):</strong> {', '.join(successful_models)}</p>
+                    <p><strong>Successful ({successful_retrievals}/{total_models}):</strong> {", ".join(successful_models)}</p>
                     <p><strong>Failed:</strong></p>
                     {failed_details}
                     {skip_info}
@@ -288,7 +296,9 @@ class DataManagement:
         try:
             configured_models = self.ui.config_manager.models
             selected_paths = {
-                model_key.split("-")[0]: self.ui.selected_file_paths.get(model_key.split("-")[0])
+                model_key.split("-")[0]: self.ui.selected_file_paths.get(
+                    model_key.split("-")[0]
+                )
                 for model_key in configured_models.keys()
             }
             # Keep only models that have a file path specified
@@ -335,8 +345,11 @@ class DataManagement:
                 try:
                     bbox_coords = []
 
-                    for model_short in results:
-                        if model_short in self.loaded_datasets and self._is_load_successful(results[model_short]):
+                    for model_short, model_result in results.items():
+                        if (
+                            model_short in self.loaded_datasets
+                            and self._is_load_successful(model_result)
+                        ):
                             try:
                                 first_field = self.loaded_datasets[model_short][0]
                                 west = first_field.metadata(
@@ -361,7 +374,9 @@ class DataManagement:
                                     }
                                 )
                             except Exception as e:
-                                print(f"⚠️ Could not extract {model_short.upper()} bbox: {e}")
+                                print(
+                                    f"⚠️ Could not extract {model_short.upper()} bbox: {e}"
+                                )
 
                     if bbox_coords:
                         final_west = max(bbox["west"] for bbox in bbox_coords)
@@ -800,13 +815,16 @@ class DataManagement:
         try:
             if not all_datasets:
                 return
-            if "obs_start_date" not in self.ui.widgets or "obs_end_date" not in self.ui.widgets:
+            if (
+                "obs_start_date" not in self.ui.widgets
+                or "obs_end_date" not in self.ui.widgets
+            ):
                 return
 
             import pandas as pd
 
             all_datetimes = []
-            for model_key, dataset in all_datasets.items():
+            for dataset in all_datasets.values():
                 try:
                     if hasattr(dataset, "metadata"):
                         vdt = dataset.metadata("valid_datetime")
@@ -839,7 +857,9 @@ class DataManagement:
 
             # Avoid calling bool() on dataset objects (earthkit FieldList,
             # numpy arrays, etc.) — use identity check instead.
-            has_data = (result.get("data") is not None) or (result.get("dataset") is not None)
+            has_data = (result.get("data") is not None) or (
+                result.get("dataset") is not None
+            )
             explicit_success = result.get("success", False)
 
             return has_data or explicit_success

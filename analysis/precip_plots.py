@@ -11,7 +11,6 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from matplotlib.colors import BoundaryNorm  # noqa: E402
-
 from precip_config import PrecipConfig  # noqa: E402
 from precip_forecasts import PrecipField  # noqa: E402
 
@@ -35,7 +34,9 @@ def _map_ax(fig, cfg: PrecipConfig, subplot=111):
     args = subplot if isinstance(subplot, tuple) else (subplot,)
     if _HAS_CARTOPY:
         ax = fig.add_subplot(*args, projection=ccrs.PlateCarree())
-        ax.set_extent([cfg.west, cfg.east, cfg.south, cfg.north], crs=ccrs.PlateCarree())
+        ax.set_extent(
+            [cfg.west, cfg.east, cfg.south, cfg.north], crs=ccrs.PlateCarree()
+        )
         ax.add_feature(cfeature.COASTLINE, linewidth=0.5)
         ax.add_feature(cfeature.BORDERS, linewidth=0.5)
         gl = ax.gridlines(draw_labels=True, linewidth=0.25, alpha=0.4)
@@ -50,36 +51,57 @@ def _map_ax(fig, cfg: PrecipConfig, subplot=111):
 
 
 def _draw_field(ax, field: PrecipField, kw: dict):
-    """Filled 24 h precip field at the model's native resolution.
+    """Draw a filled 24 h precip field at the model's native resolution.
 
     Uses triangulated contouring so it works for both regular lat/lon grids
     (AIFS) and reduced-Gaussian grids (IFS), which are 1-D point sets.
     """
     return ax.tricontourf(
-        field.lons, field.lats, field.tp24,
-        levels=LEVELS, cmap=CMAP, norm=NORM, extend="max", **kw,
+        field.lons,
+        field.lats,
+        field.tp24,
+        levels=LEVELS,
+        cmap=CMAP,
+        norm=NORM,
+        extend="max",
+        **kw,
     )
 
 
 def _draw_obs(ax, obs: pd.DataFrame, kw: dict, s: int = 45):
     """Overlay gauge tp24 as ringed points on the shared precip scale."""
     return ax.scatter(
-        obs["lon"], obs["lat"], c=obs["obs"], cmap=CMAP, norm=NORM,
-        s=s, edgecolor="k", linewidth=0.6, zorder=5, **kw,
+        obs["lon"],
+        obs["lat"],
+        c=obs["obs"],
+        cmap=CMAP,
+        norm=NORM,
+        s=s,
+        edgecolor="k",
+        linewidth=0.6,
+        zorder=5,
+        **kw,
     )
 
 
 def plot_event_intercomparison(
-    cfg: PrecipConfig, obs: pd.DataFrame, fields: dict[str, PrecipField], fname: str,
-    subtitle: str | None = None, order: tuple[str, ...] = ("ifs", "aifs", "j1l8"),
+    cfg: PrecipConfig,
+    obs: pd.DataFrame,
+    fields: dict[str, PrecipField],
+    fname: str,
+    subtitle: str | None = None,
+    order: tuple[str, ...] = ("ifs", "aifs", "j1l8"),
 ) -> Path:
     """Gauges + the three models' 24 h forecast of the reported valid window."""
     fig = plt.figure(figsize=(15, 11))
 
     ax, kw = _map_ax(fig, cfg, (2, 2, 1))
-    sc = _draw_obs(ax, obs, kw, s=70)
-    ax.set_title(f"STVL gauges — 24 h to {cfg.window_end:%d %b %HZ}\n"
-                 f"(n={len(obs)}, max {obs['obs'].max():.0f} mm)", fontsize=11)
+    _draw_obs(ax, obs, kw, s=70)
+    ax.set_title(
+        f"STVL gauges — 24 h to {cfg.window_end:%d %b %HZ}\n"
+        f"(n={len(obs)}, max {obs['obs'].max():.0f} mm)",
+        fontsize=11,
+    )
 
     for i, key in enumerate(order, start=2):
         fld = fields.get(key)
@@ -104,7 +126,9 @@ def plot_event_intercomparison(
     if subtitle:
         title += f"\n{subtitle}"
     fig.suptitle(title, fontsize=14, y=0.98)
-    fig.subplots_adjust(left=0.04, right=0.97, top=0.90, bottom=0.11, hspace=0.16, wspace=0.10)
+    fig.subplots_adjust(
+        left=0.04, right=0.97, top=0.90, bottom=0.11, hspace=0.16, wspace=0.10
+    )
     out = cfg.figures_dir / fname
     fig.savefig(out, dpi=130)
     plt.close(fig)
@@ -112,11 +136,15 @@ def plot_event_intercomparison(
 
 
 def plot_lead_time_comparison(
-    cfg: PrecipConfig, obs: pd.DataFrame, fields_by_model: dict[str, list[PrecipField]], fname: str,
+    cfg: PrecipConfig,
+    obs: pd.DataFrame,
+    fields_by_model: dict[str, list[PrecipField]],
+    fname: str,
     order: tuple[str, ...] = ("ifs", "aifs", "j1l8"),
 ) -> Path:
-    """Forecasts of the same valid window from up to three models, one row
-    per lead time (i.e. per initialisation), so earlier lead times can be checked
+    """Plot the same valid window from up to three models, one row per lead time.
+
+    Each row is one initialisation, so earlier lead times can be checked
     for the same misplacement seen in the reported run.
     """
     order = [k for k in order if k in fields_by_model]
@@ -146,9 +174,12 @@ def plot_lead_time_comparison(
     fig.suptitle(
         f"{' vs '.join(labels)} — same valid window at successive lead times\n"
         "(rings = gauges; checks whether the misplacement recurs at earlier lead times)",
-        fontsize=14, y=0.995,
+        fontsize=14,
+        y=0.995,
     )
-    fig.subplots_adjust(left=0.03, right=0.98, top=0.93, bottom=0.04, hspace=0.28, wspace=0.10)
+    fig.subplots_adjust(
+        left=0.03, right=0.98, top=0.93, bottom=0.04, hspace=0.28, wspace=0.10
+    )
     out = cfg.figures_dir / fname
     fig.savefig(out, dpi=120)
     plt.close(fig)
@@ -156,7 +187,11 @@ def plot_lead_time_comparison(
 
 
 def plot_predictability_grid(
-    cfg: PrecipConfig, obs: pd.DataFrame, fields: list[PrecipField], fname: str, label: str
+    cfg: PrecipConfig,
+    obs: pd.DataFrame,
+    fields: list[PrecipField],
+    fname: str,
+    label: str,
 ) -> Path:
     """Small-multiples of one model's forecast of the fixed window by lead time."""
     fields = sorted(fields, key=lambda f: f.lead)
@@ -169,9 +204,12 @@ def plot_predictability_grid(
         ax, kw = _map_ax(fig, cfg, (nrows, ncols, i))
         cf = _draw_field(ax, fld, kw)
         _draw_obs(ax, obs, kw, s=16)
-        ax.set_title(f"init {fld.base:%d %b %HZ}  (lead {fld.lead} h)\n"
-                     f"+{fld.step_start}–{fld.step_end} h acc. · "
-                     f"max {fld.tp24.max():.0f} mm", fontsize=10)
+        ax.set_title(
+            f"init {fld.base:%d %b %HZ}  (lead {fld.lead} h)\n"
+            f"+{fld.step_start}–{fld.step_end} h acc. · "
+            f"max {fld.tp24.max():.0f} mm",
+            fontsize=10,
+        )
     if cf is not None:
         cbar_ax = fig.add_axes([0.35, 0.045, 0.32, 0.014])
         cb = fig.colorbar(cf, cax=cbar_ax, orientation="horizontal", extend="max")
@@ -179,9 +217,12 @@ def plot_predictability_grid(
     fig.suptitle(
         f"{label} — predictability of the {cfg.window_end:%d %b} Baltic rain "
         "across initialisation lead times (rings = gauges)",
-        fontsize=14, y=0.99,
+        fontsize=14,
+        y=0.99,
     )
-    fig.subplots_adjust(left=0.03, right=0.98, top=0.93, bottom=0.09, hspace=0.22, wspace=0.08)
+    fig.subplots_adjust(
+        left=0.03, right=0.98, top=0.93, bottom=0.09, hspace=0.22, wspace=0.08
+    )
     out = cfg.figures_dir / fname
     fig.savefig(out, dpi=120)
     plt.close(fig)
@@ -194,8 +235,8 @@ def plot_displacement_summary(
     """Northward displacement, bias and RMSE vs lead time for all models."""
     fig, axes = plt.subplots(1, 3, figsize=(17, 5))
 
-    for key, sub in summary.groupby("model"):
-        sub = sub.sort_values("lead")
+    for key, grp in summary.groupby("model"):
+        sub = grp.sort_values("lead")
         c = MODEL_COLORS.get(key, "k")
         lbl = sub["label"].iloc[0]
         axes[0].plot(sub["lead"], sub["cm_lat"], "-o", color=c, label=lbl)

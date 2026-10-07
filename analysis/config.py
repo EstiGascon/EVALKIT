@@ -76,6 +76,7 @@ class StudyConfig:
     helpers_pkg_dir: Path = field(default=REPO_ROOT / "clickable_timeseries")
 
     def __post_init__(self) -> None:
+        """Create output directories."""
         for d in (self.data_dir, self.figures_dir, self.results_dir):
             d.mkdir(parents=True, exist_ok=True)
 
@@ -83,7 +84,12 @@ class StudyConfig:
     @property
     def obs_dir(self) -> Path:
         """Directory where STVL 10ff .geo files are stored."""
-        return self.data_dir / "observations" / self.obs_parameter / f"{self.obs_parameter}_3h"
+        return (
+            self.data_dir
+            / "observations"
+            / self.obs_parameter
+            / f"{self.obs_parameter}_3h"
+        )
 
     @property
     def forecast_cache_dir(self) -> Path:

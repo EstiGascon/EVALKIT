@@ -18,6 +18,7 @@ def _get_rdylbu_colormap():
     """Return the RdYlBu_r matplotlib colormap, or None if matplotlib is unavailable."""
     try:
         from matplotlib import colormaps
+
         return colormaps["RdYlBu_r"]
     except Exception:
         return None
@@ -1188,7 +1189,9 @@ class ObservationHandlerCallbacks:
             self.parent.map_handler.clear_observation_markers()
         if self.parent.ui and "obs_colorbar" in self.parent.ui.widgets:
             self.parent.ui.widgets["obs_colorbar"].layout.display = "none"
-        if self.parent.map_handler and hasattr(self.parent.map_handler, "hide_obs_legend"):
+        if self.parent.map_handler and hasattr(
+            self.parent.map_handler, "hide_obs_legend"
+        ):
             self.parent.map_handler.hide_obs_legend()
 
         error_html = self._create_simple_error_html(str(error))
@@ -1500,7 +1503,7 @@ class ObservationHandlerCallbacks:
         denom = vmax - vmin if vmax != vmin else 1.0
         t = max(0.0, min(1.0, (value - vmin) / denom))
         r, g, b, _ = cmap(t)
-        return f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
+        return f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
 
     @staticmethod
     def _build_colorbar_html(vmin, vmax, unit=""):
@@ -1515,7 +1518,9 @@ class ObservationHandlerCallbacks:
                 t = i / n
                 r, g, b, _ = cmap(t)
                 pct = round(t * 100)
-                stops.append(f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x} {pct}%")
+                stops.append(
+                    f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x} {pct}%"
+                )
             gradient = ", ".join(stops)
         except Exception:
             gradient = "#0000ff 0%, #ff0000 100%"
@@ -1526,12 +1531,12 @@ class ObservationHandlerCallbacks:
             f'<div style="margin:4px 0;font-size:0.8em;color:#444;">'
             f'<span style="font-weight:bold;">Station mean values{unit_str}</span><br>'
             f'<div style="display:flex;align-items:center;gap:4px;margin-top:3px;">'
-            f'<span>{label_lo}</span>'
+            f"<span>{label_lo}</span>"
             f'<div style="flex:1;height:10px;border-radius:4px;'
-            f'background:linear-gradient(to right,{gradient});'
+            f"background:linear-gradient(to right,{gradient});"
             f'border:1px solid #ccc;"></div>'
-            f'<span>{label_hi}</span>'
-            f'</div></div>'
+            f"<span>{label_hi}</span>"
+            f"</div></div>"
         )
 
     def _create_unified_observation_markers(self, filtered_stations_gdf):
@@ -1543,7 +1548,6 @@ class ObservationHandlerCallbacks:
         """
         try:
             import ipyleaflet as _ipl
-            import ipywidgets as _w
 
             if (
                 not self.parent.map_handler
@@ -1556,7 +1560,9 @@ class ObservationHandlerCallbacks:
 
             # Compute per-station mean observation value for colour mapping
             timeseries_data = (
-                self.parent.current_data.get("observations", {}).get("timeseries_data", {})
+                self.parent.current_data.get("observations", {}).get(
+                    "timeseries_data", {}
+                )
                 if hasattr(self.parent, "current_data") and self.parent.current_data
                 else {}
             )
@@ -1573,7 +1579,11 @@ class ObservationHandlerCallbacks:
             has_values = bool(station_means)
             if has_values:
                 # Clamp colour range to visible stations only for better contrast
-                visible_means = {sid: v for sid, v in station_means.items() if sid in filtered_stations_gdf.index}
+                visible_means = {
+                    sid: v
+                    for sid, v in station_means.items()
+                    if sid in filtered_stations_gdf.index
+                }
                 scale_source = visible_means if visible_means else station_means
                 vmin = min(scale_source.values())
                 vmax = max(scale_source.values())
@@ -1588,10 +1598,8 @@ class ObservationHandlerCallbacks:
 
                 if mean_val is not None and has_values and vmin != vmax:
                     fill_color = self._value_to_hex(mean_val, vmin, vmax)
-                    val_str = f"{mean_val:.2f}"
                 else:
                     fill_color = "#949190"
-                    val_str = "N/A" if mean_val is None else f"{mean_val:.2f}"
 
                 marker_data = {
                     "station_id": station_id,
@@ -1600,7 +1608,9 @@ class ObservationHandlerCallbacks:
                     "type": "observation",
                     "color": fill_color,
                     "popup_info": self._create_observation_popup_info(
-                        station_id, station_info, mean_val=mean_val,
+                        station_id,
+                        station_info,
+                        mean_val=mean_val,
                     ),
                 }
                 self.parent.map_handler.add_observation_marker(
@@ -1620,12 +1630,11 @@ class ObservationHandlerCallbacks:
             self.parent.map_handler.observation_layer_group = new_layer_group
 
             # Show/hide colorbar legend
-            if (
-                self.parent.ui
-                and "obs_colorbar" in self.parent.ui.widgets
-            ):
+            if self.parent.ui and "obs_colorbar" in self.parent.ui.widgets:
                 if has_values and vmin != vmax:
-                    self.parent.ui.widgets["obs_colorbar"].value = self._build_colorbar_html(vmin, vmax)
+                    self.parent.ui.widgets[
+                        "obs_colorbar"
+                    ].value = self._build_colorbar_html(vmin, vmax)
                     self.parent.ui.widgets["obs_colorbar"].layout.display = ""
                 else:
                     self.parent.ui.widgets["obs_colorbar"].layout.display = "none"
@@ -1633,7 +1642,9 @@ class ObservationHandlerCallbacks:
             # Also update map legend overlay
             if self.parent.map_handler:
                 if has_values and vmin != vmax:
-                    obs_meta = self.parent.current_data.get("observations", {}).get("metadata", {})
+                    obs_meta = self.parent.current_data.get("observations", {}).get(
+                        "metadata", {}
+                    )
                     unit = obs_meta.get("parameter", "")
                     self.parent.map_handler.update_obs_legend(vmin, vmax, unit=unit)
                 else:
@@ -1755,8 +1766,8 @@ class ObservationHandlerCallbacks:
 
     def _get_station_values_at_time(self, target_dt):
         """Return {station_id: value} for the given datetime."""
-        timeseries_data = (
-            self.parent.current_data.get("observations", {}).get("timeseries_data", {})
+        timeseries_data = self.parent.current_data.get("observations", {}).get(
+            "timeseries_data", {}
         )
         result = {}
         for sid, data in timeseries_data.items():
@@ -1790,9 +1801,9 @@ class ObservationHandlerCallbacks:
         total = len(self._obs_time_steps)
         idx = self._obs_time_index + 1
         label = dt.strftime("%Y-%m-%d %H:%M") if hasattr(dt, "strftime") else str(dt)
-        self.parent.ui.widgets["obs_time_label"].value = (
-            f"<span style='font-size:12px;color:#333;'><b>{label}</b> ({idx}/{total})</span>"
-        )
+        self.parent.ui.widgets[
+            "obs_time_label"
+        ].value = f"<span style='font-size:12px;color:#333;'><b>{label}</b> ({idx}/{total})</span>"
 
     def _color_markers_at_current_time(self):
         """Re-color observation markers for the current time step."""
@@ -1804,7 +1815,11 @@ class ObservationHandlerCallbacks:
 
         target_dt = self._obs_time_steps[self._obs_time_index]
         station_values = self._get_station_values_at_time(target_dt)
-        label = target_dt.strftime("%Y-%m-%d %H:%M") if hasattr(target_dt, "strftime") else str(target_dt)
+        label = (
+            target_dt.strftime("%Y-%m-%d %H:%M")
+            if hasattr(target_dt, "strftime")
+            else str(target_dt)
+        )
 
         vmin = self._obs_fixed_vmin
         vmax = self._obs_fixed_vmax
@@ -1822,10 +1837,10 @@ class ObservationHandlerCallbacks:
             val_str = f"{val:.2f}" if val is not None else "N/A"
             popup_html = (
                 f'<div style="width:200px;color:black;">'
-                f'<b>Station {sid}</b><br>'
+                f"<b>Station {sid}</b><br>"
                 f'<span style="font-size:1.1em;color:#E65100;"><b>{val_str}</b></span><br>'
                 f'<span style="font-size:0.85em;color:#666;">{label}</span>'
-                f'</div>'
+                f"</div>"
             )
             marker.popup = _ipl.Popup(
                 child=_widgets.HTML(popup_html),

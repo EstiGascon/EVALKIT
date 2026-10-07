@@ -1,4 +1,3 @@
-import traceback
 from typing import Any
 
 import ipywidgets as widgets
@@ -75,7 +74,11 @@ class PlottingManager:
             pass
         # Fallback to config
         try:
-            cfg_val = self.current_config.get("parameters", {}).get("step_frequency", 1) if self.current_config else 1
+            cfg_val = (
+                self.current_config.get("parameters", {}).get("step_frequency", 1)
+                if self.current_config
+                else 1
+            )
             val = int(cfg_val) if cfg_val is not None else 1
             return val
         except Exception:
@@ -314,7 +317,11 @@ class PlottingManager:
         self.selected_points = points
 
     def create_stamps_plot(
-        self, parameter=None, step=None, unit_value=None, palette_value=None,
+        self,
+        parameter=None,
+        step=None,
+        unit_value=None,
+        palette_value=None,
         precip_accumulation=None,
     ):
         """Create stamps plot with step validation.
@@ -324,6 +331,7 @@ class PlottingManager:
             step: Forecast step in hours
             unit_value: Target unit for conversion
             palette_value: Color palette option
+            precip_accumulation: Optional precipitation accumulation setting passed to the stamps plotter
 
         Returns:
             True if successful, False otherwise
@@ -449,15 +457,21 @@ class PlottingManager:
                     if key_steps:
                         steps_by_source[key] = key_steps
 
-        print(f"[steps] get_available_steps_for_parameter({parameter!r}): "
-              + ", ".join(f"{k}={sorted(v)[:20]}{'...' if len(v) > 20 else ''}"
-                          for k, v in steps_by_source.items()))
+        print(
+            f"[steps] get_available_steps_for_parameter({parameter!r}): "
+            + ", ".join(
+                f"{k}={sorted(v)[:20]}{'...' if len(v) > 20 else ''}"
+                for k, v in steps_by_source.items()
+            )
+        )
 
         if not steps_by_source:
             return []
 
         # Ensemble steps: union of CF and PF steps
-        ensemble_steps = steps_by_source.get("cf", set()) | steps_by_source.get("pf", set())
+        ensemble_steps = steps_by_source.get("cf", set()) | steps_by_source.get(
+            "pf", set()
+        )
         fc_steps = steps_by_source.get("fc", set())
 
         if ensemble_steps and fc_steps:
@@ -531,7 +545,9 @@ class PlottingManager:
             return self._create_comparison_meteogram(parameter, unit_value)
 
         def plot_method(param, lat, lon, unit):
-            model_class = self.current_config.get("parameters", {}).get("model_class", "")
+            model_class = self.current_config.get("parameters", {}).get(
+                "model_class", ""
+            )
             step_freq = self._get_live_step_frequency()
             chart = self.meteogram_plotter.create_meteogram(
                 meteogram_data=self.current_data,
@@ -585,13 +601,39 @@ class PlottingManager:
             first_point = next(iter(self.selected_points.values()))
             lat, lon = first_point
 
-            model_display = {"ifs": "IFS-ENS", "aifs": "AIFS-ENS", "aifs-single": "AIFS-Single", "ifs-4km": "IFS 4.4km", "custom": "Custom"}
+            model_display = {
+                "ifs": "IFS-ENS",
+                "aifs": "AIFS-ENS",
+                "aifs-single": "AIFS-Single",
+                "ifs-4km": "IFS 4.4km",
+                "custom": "Custom",
+            }
             model_colors = {
-                "ifs":         {"cf": "#D32F2F", "pf": "#1565C0", "pf_fill": "rgba(21,101,192,0.15)"},
-                "aifs":        {"cf": "#2E7D32", "pf": "#F57F17", "pf_fill": "rgba(245,127,23,0.15)"},
-                "aifs-single": {"cf": "#2E7D32", "pf": "#2E7D32", "pf_fill": "rgba(46,125,50,0.15)"},
-                "ifs-4km":     {"cf": "#7B1FA2", "pf": "#7B1FA2", "pf_fill": "rgba(123,31,162,0.15)"},
-                "custom":      {"cf": "#6A1B9A", "pf": "#00838F", "pf_fill": "rgba(0,131,143,0.15)"},
+                "ifs": {
+                    "cf": "#D32F2F",
+                    "pf": "#1565C0",
+                    "pf_fill": "rgba(21,101,192,0.15)",
+                },
+                "aifs": {
+                    "cf": "#2E7D32",
+                    "pf": "#F57F17",
+                    "pf_fill": "rgba(245,127,23,0.15)",
+                },
+                "aifs-single": {
+                    "cf": "#2E7D32",
+                    "pf": "#2E7D32",
+                    "pf_fill": "rgba(46,125,50,0.15)",
+                },
+                "ifs-4km": {
+                    "cf": "#7B1FA2",
+                    "pf": "#7B1FA2",
+                    "pf_fill": "rgba(123,31,162,0.15)",
+                },
+                "custom": {
+                    "cf": "#6A1B9A",
+                    "pf": "#00838F",
+                    "pf_fill": "rgba(0,131,143,0.15)",
+                },
             }
 
             # Step frequency from UI Frequency dropdown is the single source
@@ -601,6 +643,7 @@ class PlottingManager:
 
             # Build a single figure with overlaid traces
             import plotly.graph_objects as go
+
             combined = go.Figure()
             first_chart = None
 
@@ -659,6 +702,7 @@ class PlottingManager:
                 # Offset Box and Bar traces side-by-side per model
                 import numpy as np
                 import pandas as pd
+
                 model_names = list(self.multi_model_data.keys())
                 n_models = len(model_names)
                 if n_models > 1:
@@ -666,12 +710,21 @@ class PlottingManager:
                     step_ms = None
                     for trace in combined.data:
                         trace_type = type(trace).__name__
-                        if trace_type in ("Box", "Bar") and hasattr(trace, "x") and trace.x is not None and len(trace.x) >= 2:
+                        if (
+                            trace_type in ("Box", "Bar")
+                            and hasattr(trace, "x")
+                            and trace.x is not None
+                            and len(trace.x) >= 2
+                        ):
                             try:
                                 x_sorted = sorted(pd.Timestamp(t) for t in trace.x[:20])
                                 for i in range(len(x_sorted) - 1):
-                                    gap_ms = (x_sorted[i + 1] - x_sorted[i]).total_seconds() * 1000
-                                    if gap_ms > 0 and (step_ms is None or gap_ms < step_ms):
+                                    gap_ms = (
+                                        x_sorted[i + 1] - x_sorted[i]
+                                    ).total_seconds() * 1000
+                                    if gap_ms > 0 and (
+                                        step_ms is None or gap_ms < step_ms
+                                    ):
                                         step_ms = gap_ms
                             except Exception:
                                 continue
@@ -695,7 +748,9 @@ class PlottingManager:
                                     if isinstance(x_vals, np.ndarray):
                                         trace.x = pd.DatetimeIndex(x_vals) + offset_td
                                     else:
-                                        trace.x = [pd.Timestamp(t) + offset_td for t in x_vals]
+                                        trace.x = [
+                                            pd.Timestamp(t) + offset_td for t in x_vals
+                                        ]
                                 except Exception:
                                     pass
 
@@ -715,6 +770,7 @@ class PlottingManager:
                 if "title" in layout and layout["title"].get("text"):
                     orig_title = layout["title"]["text"]
                     import re as _re
+
                     layout["title"]["text"] = _re.sub(
                         r"Meteogram\s*\([^)]*\)",
                         f"Meteogram Comparison ({all_display})",
@@ -805,7 +861,9 @@ class PlottingManager:
             return self._create_comparison_plumes(parameter, unit_value)
 
         def plot_method(param, lat, lon, unit):
-            model_class = self.current_config.get("parameters", {}).get("model_class", "")
+            model_class = self.current_config.get("parameters", {}).get(
+                "model_class", ""
+            )
             step_freq = self._get_live_step_frequency()
             fig = self.plumes_plotter.create_plumes_plot(
                 forecast_data=self.current_data,
@@ -858,6 +916,7 @@ class PlottingManager:
             step_freq = self._get_live_step_frequency()
 
             import plotly.graph_objects as go
+
             combined = go.Figure()
             first_fig = None
 
@@ -909,18 +968,28 @@ class PlottingManager:
                 # Offset Bar traces side-by-side per model (for precipitation)
                 import numpy as np
                 import pandas as pd
+
                 model_names = list(self.multi_model_data.keys())
                 n_models = len(model_names)
                 if n_models > 1:
                     step_ms = None
                     for trace in combined.data:
                         trace_type = type(trace).__name__
-                        if trace_type == "Bar" and hasattr(trace, "x") and trace.x is not None and len(trace.x) >= 2:
+                        if (
+                            trace_type == "Bar"
+                            and hasattr(trace, "x")
+                            and trace.x is not None
+                            and len(trace.x) >= 2
+                        ):
                             try:
                                 x_sorted = sorted(pd.Timestamp(t) for t in trace.x[:20])
                                 for i in range(len(x_sorted) - 1):
-                                    gap_ms = (x_sorted[i + 1] - x_sorted[i]).total_seconds() * 1000
-                                    if gap_ms > 0 and (step_ms is None or gap_ms < step_ms):
+                                    gap_ms = (
+                                        x_sorted[i + 1] - x_sorted[i]
+                                    ).total_seconds() * 1000
+                                    if gap_ms > 0 and (
+                                        step_ms is None or gap_ms < step_ms
+                                    ):
                                         step_ms = gap_ms
                             except Exception:
                                 continue
@@ -939,7 +1008,9 @@ class PlottingManager:
                                     if isinstance(x_vals, np.ndarray):
                                         trace.x = pd.DatetimeIndex(x_vals) + offset_td
                                     else:
-                                        trace.x = [pd.Timestamp(t) + offset_td for t in x_vals]
+                                        trace.x = [
+                                            pd.Timestamp(t) + offset_td for t in x_vals
+                                        ]
                                 except Exception:
                                     pass
                                 trace.width = bar_width_s
@@ -953,6 +1024,7 @@ class PlottingManager:
                 )
                 if "title" in layout and layout["title"].get("text"):
                     import re as _re
+
                     layout["title"]["text"] = _re.sub(
                         r"Plumes\s*\([^)]*\)",
                         f"Plumes Comparison ({all_display})",

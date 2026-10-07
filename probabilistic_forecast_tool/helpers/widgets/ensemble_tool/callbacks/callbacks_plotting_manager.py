@@ -37,7 +37,9 @@ class PlottingManagerCallbacks:
                 calculated.append(param)
         return calculated
 
-    def create_stamps_plot(self, parameter, step, unit_value, palette_value, precip_accumulation=None):
+    def create_stamps_plot(
+        self, parameter, step, unit_value, palette_value, precip_accumulation=None
+    ):
         """Create stamps plot using plotting manager.
 
         Args:
@@ -105,22 +107,21 @@ class PlottingManagerCallbacks:
                         "success",
                         section="plotting",
                     )
-            else:
-                if self.parent.ui:
-                    last_err = getattr(self.parent.plotting_manager, "_last_stamps_error", "")
-                    msg = (
-                        f"Could not create stamps plot for {parameter.upper()} at T+{step}h. "
-                    )
-                    if last_err:
-                        msg += str(last_err)
-                    else:
-                        msg += "Check that this parameter and step exist in the retrieved data."
-                    self.parent.ui.show_alert_message(
-                        msg,
-                        "error",
-                        section="plotting",
-                        permanent=True,
-                    )
+            elif self.parent.ui:
+                last_err = getattr(
+                    self.parent.plotting_manager, "_last_stamps_error", ""
+                )
+                msg = f"Could not create stamps plot for {parameter.upper()} at T+{step}h. "
+                if last_err:
+                    msg += str(last_err)
+                else:
+                    msg += "Check that this parameter and step exist in the retrieved data."
+                self.parent.ui.show_alert_message(
+                    msg,
+                    "error",
+                    section="plotting",
+                    permanent=True,
+                )
 
             return success
 
@@ -256,18 +257,19 @@ class PlottingManagerCallbacks:
                         section="plotting",
                         permanent=True,
                     )
-            else:
-                if self.parent.ui:
-                    pm = self.parent.plotting_manager
-                    if not pm.current_data:
-                        msg = "No data loaded. Please retrieve or load data first."
-                    elif not pm.selected_points:
-                        msg = "No point selected. Please click the map or use '+ Add Point'."
-                    else:
-                        msg = f"Parameter '{parameter}' could not be plotted. It may not be present in the loaded data."
-                    self.parent.ui.show_alert_message(
-                        msg, "error", section="plotting", permanent=True
+            elif self.parent.ui:
+                pm = self.parent.plotting_manager
+                if not pm.current_data:
+                    msg = "No data loaded. Please retrieve or load data first."
+                elif not pm.selected_points:
+                    msg = (
+                        "No point selected. Please click the map or use '+ Add Point'."
                     )
+                else:
+                    msg = f"Parameter '{parameter}' could not be plotted. It may not be present in the loaded data."
+                self.parent.ui.show_alert_message(
+                    msg, "error", section="plotting", permanent=True
+                )
 
             return success
 
@@ -335,18 +337,19 @@ class PlottingManagerCallbacks:
                         section="plotting",
                         permanent=True,
                     )
-            else:
-                if self.parent.ui:
-                    pm = self.parent.plotting_manager
-                    if not pm.current_data:
-                        msg = "No data loaded. Please retrieve or load data first."
-                    elif not pm.selected_points:
-                        msg = "No point selected. Please click the map or use '+ Add Point'."
-                    else:
-                        msg = f"Parameter '{parameter}' could not be plotted. It may not be present in the loaded data."
-                    self.parent.ui.show_alert_message(
-                        msg, "error", section="plotting", permanent=True
+            elif self.parent.ui:
+                pm = self.parent.plotting_manager
+                if not pm.current_data:
+                    msg = "No data loaded. Please retrieve or load data first."
+                elif not pm.selected_points:
+                    msg = (
+                        "No point selected. Please click the map or use '+ Add Point'."
                     )
+                else:
+                    msg = f"Parameter '{parameter}' could not be plotted. It may not be present in the loaded data."
+                self.parent.ui.show_alert_message(
+                    msg, "error", section="plotting", permanent=True
+                )
 
             return success
 

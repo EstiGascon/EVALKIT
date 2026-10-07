@@ -126,6 +126,8 @@ class ForecastDataLoader:
             use_bbox: Use bounding box from manager if True
             custom_area: Optional custom area coordinates [north, west, south, east]
             custom_steps: Optional list of custom forecast steps
+            expver: Optional MARS experiment version (e.g. for rd experiments)
+            custom_class: Optional MARS class overriding the model's class
 
         Returns:
             Dictionary with keys: 'dataset', 'metadata', 'model_key', or None if no valid parameters
@@ -242,6 +244,8 @@ class ForecastDataLoader:
             grid: Optional grid
             date_str: Date string for request
             custom_steps: Optional custom steps
+            expver: Optional MARS experiment version
+            custom_class: Optional MARS class overriding the model's class
 
         Returns:
             Dictionary with keys 'dataset', 'metadata', 'model_key' or None if request fails
@@ -250,7 +254,9 @@ class ForecastDataLoader:
         param_ids = self.config_manager.get_param_ids(param)
         class_model = custom_class or self.config_manager.get_model_class(model)
         # expver: use caller-supplied value first, then fall back to config
-        expver = expver or (self.config_manager.get_model_info(model) or {}).get("expver")
+        expver = expver or (self.config_manager.get_model_info(model) or {}).get(
+            "expver"
+        )
 
         if custom_steps:
             if self.config_manager.supports_custom_step_expansion(model):
@@ -289,7 +295,9 @@ class ForecastDataLoader:
                     user_min, effective_max, model, start_date
                 )
                 if not steps_to_download:
-                    print(f"⚠️  No steps generated for {model} in range [{user_min}, {effective_max}].")
+                    print(
+                        f"⚠️  No steps generated for {model} in range [{user_min}, {effective_max}]."
+                    )
                     return {
                         "error": (
                             f"No steps could be generated for {model} "
@@ -326,6 +334,7 @@ class ForecastDataLoader:
             # causes "unable to open database file" errors. Use /tmp (local
             # tmpfs) unconditionally so SQLite always has a working filesystem.
             import os
+
             _orig_tmpdir = os.environ.get("TMPDIR")
             _mars_tmp = f"/tmp/mars_tmp_{os.environ.get('USER', 'evalkit')}"
             os.makedirs(_mars_tmp, exist_ok=True)
@@ -345,7 +354,9 @@ class ForecastDataLoader:
             # subsequent calls return the stale 0-field result.  Try three
             # escalating fallbacks before giving up.
             if len(ds) == 0:
-                print(f"⚠️  MARS returned 0 fields for {model} — retrying without earthkit cache...")
+                print(
+                    f"⚠️  MARS returned 0 fields for {model} — retrying without earthkit cache..."
+                )
                 ds = self._retry_no_cache(request_params, model)
 
             model_key = f"{model}_{start_date.strftime('%Y%m%d')}"
@@ -387,18 +398,32 @@ class ForecastDataLoader:
                 if isinstance(cause, subprocess.CalledProcessError):
                     parts = []
                     if cause.stderr:
-                        s = cause.stderr if isinstance(cause.stderr, str) else cause.stderr.decode("utf-8", errors="replace")
+                        s = (
+                            cause.stderr
+                            if isinstance(cause.stderr, str)
+                            else cause.stderr.decode("utf-8", errors="replace")
+                        )
                         parts.append(s.strip())
                     if cause.stdout:
-                        s = cause.stdout if isinstance(cause.stdout, str) else cause.stdout.decode("utf-8", errors="replace")
+                        s = (
+                            cause.stdout
+                            if isinstance(cause.stdout, str)
+                            else cause.stdout.decode("utf-8", errors="replace")
+                        )
                         parts.append(s.strip())
                     if parts:
                         error_detail = "\n".join(parts)
                     break
-                cause = getattr(cause, "__cause__", None) or getattr(cause, "__context__", None)
+                cause = getattr(cause, "__cause__", None) or getattr(
+                    cause, "__context__", None
+                )
             print(f"❌ MARS request failed for {model}: {error_detail}")
             steps = request_params.get("step", [])
-            step_summary = f"{steps[0]}/.../{steps[-1]} ({len(steps)} steps)" if len(steps) > 3 else str(steps)
+            step_summary = (
+                f"{steps[0]}/.../{steps[-1]} ({len(steps)} steps)"
+                if len(steps) > 3
+                else str(steps)
+            )
             error_req = {k: v for k, v in request_params.items() if k != "step"}
             error_req["step"] = step_summary
             return {"error": error_detail, "model": model, "request_params": error_req}
@@ -416,6 +441,7 @@ class ForecastDataLoader:
         all attempts fail (the caller decides how to handle it).
         """
         import os
+
         import earthkit.data as _ekd
 
         _MARS_TMP = f"/tmp/mars_tmp_{os.environ.get('USER', 'evalkit')}"
@@ -434,17 +460,25 @@ class ForecastDataLoader:
                     ds_nocache.to_target(stable_path)
             if ds_nocache is not None and len(ds_nocache) > 0:
                 ds_stable = _ekd.from_source("file", stable_path).to("fieldlist")
-                print(f"✅ MARS (no-cache) retrieved {len(ds_stable)} field(s) for {model}")
+                print(
+                    f"✅ MARS (no-cache) retrieved {len(ds_stable)} field(s) for {model}"
+                )
                 return ds_stable
-            print(f"⚠️  MARS (no-cache) also returned 0 fields for {model} — trying pyfdb...")
+            print(
+                f"⚠️  MARS (no-cache) also returned 0 fields for {model} — trying pyfdb..."
+            )
         except Exception as e:
-            print(f"[cache-bypass] MARS retry failed for {model}: {e} — trying pyfdb...")
+            print(
+                f"[cache-bypass] MARS retry failed for {model}: {e} — trying pyfdb..."
+            )
 
         # Stage 2 — direct pyfdb FDB read ────────────────────────────────
         try:
             ds_fdb = self._retrieve_via_pyfdb(request_params)
             if len(ds_fdb) > 0:
-                print(f"✅ FDB fallback retrieved {len(ds_fdb)} field(s) for {model} (native domain — no area filter)")
+                print(
+                    f"✅ FDB fallback retrieved {len(ds_fdb)} field(s) for {model} (native domain — no area filter)"
+                )
                 return ds_fdb
             print(f"[pyfdb] FDB also returned 0 fields for {model}")
         except Exception as e:
@@ -465,6 +499,7 @@ class ForecastDataLoader:
         Returns an earthkit FieldList loaded from the written GRIB file.
         """
         import os
+
         try:
             import pyfdb
         except ImportError:
@@ -475,9 +510,10 @@ class ForecastDataLoader:
         os.makedirs(_MARS_TMP, exist_ok=True)
 
         fdb_request = {}
-        for k, v in request_params.items():
+        for k, value in request_params.items():
             if k in _SKIP_KEYS:
                 continue
+            v = value
             if k == "date":
                 v = str(v).replace("-", "")
             if k == "param":
@@ -499,6 +535,7 @@ class ForecastDataLoader:
                         except ValueError:
                             pass
                     return [item]
+
                 flat = []
                 for item in v:
                     flat.extend(_expand(item))

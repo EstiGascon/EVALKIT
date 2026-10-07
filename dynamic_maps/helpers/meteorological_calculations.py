@@ -199,9 +199,7 @@ def _extract_and_process_coordinates(
         return lats, lons
 
     except (AttributeError, ValueError) as e:
-        raise ValueError(
-            f"Could not extract grid coordinates from field: {e}"
-        ) from e
+        raise ValueError(f"Could not extract grid coordinates from field: {e}") from e
 
 
 def _create_dataset(  # noqa: PLR0913

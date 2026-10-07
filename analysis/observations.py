@@ -12,7 +12,6 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-
 from config import StudyConfig
 
 
@@ -35,9 +34,14 @@ def retrieve_observations(cfg: StudyConfig, force: bool = False) -> Path:
 
     Returns:
         The directory containing the retrieved ``.geo`` files.
+
     """
     out_dir = cfg.obs_dir
-    existing = sorted(out_dir.glob(f"{cfg.obs_parameter}_obs_*.geo")) if out_dir.exists() else []
+    existing = (
+        sorted(out_dir.glob(f"{cfg.obs_parameter}_obs_*.geo"))
+        if out_dir.exists()
+        else []
+    )
     if existing and not force:
         print(f"✓ Observations already present ({len(existing)} files) in {out_dir}")
         return out_dir
@@ -61,8 +65,6 @@ def retrieve_observations(cfg: StudyConfig, force: bool = False) -> Path:
 
 def _parse_geo_file(path: Path, missing: float) -> pd.DataFrame:
     """Parse a single STVL ``.geo`` file into a DataFrame of station values."""
-    header_date: str | None = None
-    header_time: str | None = None
     rows: list[dict] = []
     in_data = False
     with path.open("r", encoding="utf-8", errors="replace") as fh:
@@ -72,10 +74,6 @@ def _parse_geo_file(path: Path, missing: float) -> pd.DataFrame:
                 in_data = True
                 continue
             if not in_data:
-                if line.startswith("date="):
-                    header_date = line.split("=", 1)[1].strip()
-                elif line.startswith("time="):
-                    header_time = line.split("=", 1)[1].strip()
                 continue
             if not line or line.startswith("#"):
                 continue
@@ -121,6 +119,7 @@ def load_observations(cfg: StudyConfig) -> pd.DataFrame:
     Returns:
         DataFrame with columns ``stnid, lat, lon, valid_time, obs`` restricted
         to the configured bounding box.
+
     """
     files = sorted(cfg.obs_dir.glob(f"{cfg.obs_parameter}_obs_*.geo"))
     if not files:

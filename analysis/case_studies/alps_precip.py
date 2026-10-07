@@ -83,7 +83,9 @@ def retrieve_obs(force: bool = False) -> None:
     OBS_DIR.mkdir(parents=True, exist_ok=True)
     existing = sorted(OBS_DIR.glob("tp*_obs_*.geo"))
     if existing and not force:
-        print(f"\u2713 Alps tp24 obs already present ({len(existing)} files) in {OBS_DIR}")
+        print(
+            f"\u2713 Alps tp24 obs already present ({len(existing)} files) in {OBS_DIR}"
+        )
         return
     if str(HELPERS_PKG) not in sys.path:
         sys.path.insert(0, str(HELPERS_PKG))
@@ -116,8 +118,10 @@ def load_obs_for_day(day: dt.date) -> pd.DataFrame:
     obs = pd.concat(frames, ignore_index=True)
     obs = obs[obs["valid_time"] == valid]
     mask = (
-        (obs["lat"] >= SOUTH) & (obs["lat"] <= NORTH)
-        & (obs["lon"] >= WEST) & (obs["lon"] <= EAST)
+        (obs["lat"] >= SOUTH)
+        & (obs["lat"] <= NORTH)
+        & (obs["lon"] >= WEST)
+        & (obs["lon"] <= EAST)
     )
     obs = obs.loc[mask].copy()
     obs.drop_duplicates(subset="stnid", inplace=True)
@@ -195,15 +199,29 @@ def _map_ax(fig, subplot):
 
 def _draw_field(ax, lats, lons, values, kw):
     return ax.tricontourf(
-        lons, lats, values,
-        levels=LEVELS, cmap=CMAP, norm=NORM, extend="max", **kw,
+        lons,
+        lats,
+        values,
+        levels=LEVELS,
+        cmap=CMAP,
+        norm=NORM,
+        extend="max",
+        **kw,
     )
 
 
 def _draw_obs(ax, obs, kw, s=45):
     return ax.scatter(
-        obs["lon"], obs["lat"], c=obs["obs"], cmap=CMAP, norm=NORM,
-        s=s, edgecolor="k", linewidth=0.5, zorder=5, **kw,
+        obs["lon"],
+        obs["lat"],
+        c=obs["obs"],
+        cmap=CMAP,
+        norm=NORM,
+        s=s,
+        edgecolor="k",
+        linewidth=0.5,
+        zorder=5,
+        **kw,
     )
 
 
@@ -213,9 +231,7 @@ def make_figure(obs_by_day: dict, models_by_day: dict, fname: str) -> Path:
     fig = plt.figure(figsize=(15, 14))
     last_cf = None
     for r, day in enumerate(DAYS):
-        window = (
-            f"{day:%d %b} 00Z \u2192 {day + dt.timedelta(days=1):%d %b} 00Z"
-        )
+        window = f"{day:%d %b} 00Z \u2192 {day + dt.timedelta(days=1):%d %b} 00Z"
         # Column 0: gauges.
         ax, kw = _map_ax(fig, (nrows, ncols, r * ncols + 1))
         obs = obs_by_day.get(day)
@@ -263,6 +279,7 @@ def make_figure(obs_by_day: dict, models_by_day: dict, fname: str) -> Path:
 
 
 def main(force: bool = False) -> None:
+    """Retrieve gauges and forecasts, then draw the 3-day comparison figure."""
     retrieve_obs(force=force)
     obs_by_day = {day: load_obs_for_day(day) for day in DAYS}
     for day, obs in obs_by_day.items():

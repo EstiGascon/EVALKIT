@@ -25,7 +25,9 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from matplotlib.colors import BoundaryNorm  # noqa: E402
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # analysis/ pipeline modules
+sys.path.insert(
+    0, str(Path(__file__).resolve().parents[1])
+)  # analysis/ pipeline modules
 from precip_forecasts import (  # noqa: E402
     _as_fieldlist,
     _field_latlon,
@@ -126,12 +128,15 @@ def retrieve_tp24(spec: tuple, lead: int, force: bool = False):
 
 def _haversine_km(lat, lon, lat0, lon0):
     p = np.pi / 180.0
-    a = (np.sin((lat - lat0) * p / 2) ** 2
-         + np.cos(lat * p) * np.cos(lat0 * p) * np.sin((lon - lon0) * p / 2) ** 2)
+    a = (
+        np.sin((lat - lat0) * p / 2) ** 2
+        + np.cos(lat * p) * np.cos(lat0 * p) * np.sin((lon - lon0) * p / 2) ** 2
+    )
     return 2 * 6371.0 * np.arcsin(np.sqrt(a))
 
 
 def stats(res: dict) -> dict:
+    """Domain, coastal-strip and Barcelona statistics for one forecast."""
     lats, lons, tp = res["lats"], res["lons"], res["tp"]
     s, w, n, e = COAST_BOX
     coast = (lats >= s) & (lats <= n) & (lons >= w) & (lons <= e)
@@ -169,6 +174,7 @@ def _map_ax(fig, nrows, ncols, idx):
 
 
 def make_figure(results: dict) -> Path:
+    """Draw the leads x models precipitation panel figure."""
     nrows, ncols = len(LEADS), len(MODELS)
     fig = plt.figure(figsize=(5 * ncols, 4.8 * nrows + 1))
     last_cf = None
@@ -179,11 +185,25 @@ def make_figure(results: dict) -> Path:
             if res is None:
                 ax.set_title(f"{spec[1]} T+{lead}h \u2014 unavailable", fontsize=13)
                 continue
-            last_cf = ax.tricontourf(res["lons"], res["lats"], res["tp"],
-                                     levels=LEVELS, cmap=CMAP, norm=NORM,
-                                     extend="max", **kw)
-            ax.plot(BARCELONA[1], BARCELONA[0], marker="*", color="k",
-                    markersize=9, zorder=6, **kw)
+            last_cf = ax.tricontourf(
+                res["lons"],
+                res["lats"],
+                res["tp"],
+                levels=LEVELS,
+                cmap=CMAP,
+                norm=NORM,
+                extend="max",
+                **kw,
+            )
+            ax.plot(
+                BARCELONA[1],
+                BARCELONA[0],
+                marker="*",
+                color="k",
+                markersize=9,
+                zorder=6,
+                **kw,
+            )
             st = res["stats"]
             ax.set_title(
                 f"{spec[1]} \u2014 T+{lead}h ({res['s0']}\u2013{res['s1']}h)\n"
@@ -193,17 +213,20 @@ def make_figure(results: dict) -> Path:
             )
     if last_cf is not None:
         cax = fig.add_axes([0.25, 0.05, 0.5, 0.022])
-        cb = fig.colorbar(last_cf, cax=cax, orientation="horizontal", extend="max",
-                          ticks=LEVELS)
+        cb = fig.colorbar(
+            last_cf, cax=cax, orientation="horizontal", extend="max", ticks=LEVELS
+        )
         cb.set_label("24 h precipitation (mm)", fontsize=15)
         cb.ax.tick_params(labelsize=13)
     fig.suptitle(
         f"Catalonia MCS \u2014 24 h precipitation "
         f"{WINDOW_START:%d %b %H}Z \u2192 {WINDOW_END:%d %b %H}Z {WINDOW_END:%Y}",
-        fontsize=20, y=0.98,
+        fontsize=20,
+        y=0.98,
     )
-    fig.subplots_adjust(left=0.03, right=0.98, top=0.88, bottom=0.12,
-                        hspace=0.3, wspace=0.12)
+    fig.subplots_adjust(
+        left=0.03, right=0.98, top=0.88, bottom=0.12, hspace=0.3, wspace=0.12
+    )
     FIG_DIR.mkdir(parents=True, exist_ok=True)
     out = FIG_DIR / f"catalonia_precip_{WINDOW_END:%Y%m%d%H}.png"
     fig.savefig(out, dpi=130)
@@ -212,6 +235,7 @@ def make_figure(results: dict) -> Path:
 
 
 def main(force: bool = False) -> None:
+    """Retrieve all forecasts, write the statistics CSV and the figure."""
     results: dict = {}
     rows = []
     for lead in LEADS:
@@ -221,9 +245,15 @@ def main(force: bool = False) -> None:
                 continue
             res["stats"] = stats(res)
             results[(spec[0], lead)] = res
-            rows.append({"model": spec[1], "lead_h": lead,
-                         "init": f"{res['base']:%Y-%m-%d %HZ}",
-                         "steps": f"{res['s0']}-{res['s1']}", **res["stats"]})
+            rows.append(
+                {
+                    "model": spec[1],
+                    "lead_h": lead,
+                    "init": f"{res['base']:%Y-%m-%d %HZ}",
+                    "steps": f"{res['s0']}-{res['s1']}",
+                    **res["stats"],
+                }
+            )
     df = pd.DataFrame(rows)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     csv = RESULTS_DIR / f"catalonia_precip_{WINDOW_END:%Y%m%d%H}.csv"
