@@ -172,4 +172,14 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Local agent settings
+.claude/
+
+# Generated analysis data and outputs (cached MARS/STVL data; may include internal-only HDOBS)
+analysis/data/
+analysis/figures/
+analysis/results/
+analysis/*.log
+clickable_timeseries/notebooks/retrieved_observations/
 ens_probabilistic_analysis/data
