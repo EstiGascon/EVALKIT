@@ -59,7 +59,7 @@ The Configuration Panel offers two data source options.
 
 1. Select the **"Download from MARS Archive"** radio button.
 2. **Parameter Selection**: select meteorological parameters from the scrollable list (e.g. 2m Temperature, Wind components, Precipitation). Multiple parameters can be selected.
-3. **Model & Time Settings**: choose a **Model** (e.g. IFS Operational), enter a **Date** (`YYYY-MM-DD`, e.g. `2026-03-29`), and pick a **Time** (e.g. `00:00:00`).
+3. **Model & Time Settings**: choose a **Model** (**IFS Operational**, `class=od`, or **AIFS Control**, `class=ai`), enter a **Date** (`YYYY-MM-DD`, e.g. `2026-03-29`), and pick a **Time** (e.g. `00:00:00`).
 4. **Forecast Steps**: enter a **Start Step** and **End Step** (hours), click **"Update Steps"**, then use **"Select All Steps"** / **"Deselect All"** as needed. Review the generated steps in the scrollable list.
 5. **Geographic Area**: enter **North**/**South**/**West**/**East** coordinates, or draw a rectangle directly on the interactive map — the coordinate boxes populate automatically.
 6. **Grid Resolution**: enter a value (e.g. `0.25`) for a regular grid, or leave empty to use the native reduced Gaussian grid. Use **"Reset Grid"** / **"Clear Grid"** as needed.
@@ -203,7 +203,7 @@ After loading, observation stations are coloured by their value, with a colour b
 
 1. Click within your defined geographic area on the map, or add coordinates manually.
 2. Selected points appear as colored markers; select multiple points to compare locations.
-3. Orange markers represent observation stations (if loaded) — click to select them.
+3. Click an observation station (if loaded) to select it. Click it again to deselect it; it then returns to its value colour, or grey if it has no value at the current time.
 
 ### Step 5: Analyze Results
 
@@ -216,7 +216,7 @@ After loading, observation stations are coloured by their value, with a colour b
 
 ### Step 6: Manage Your Analysis
 
-- **Clear All Points** — remove all selected forecast points and observation stations.
+- **Clear All Points** — remove all selected forecast points and observation stations. The station markers stay on the map.
 - **Clear Drawings** — remove bounding boxes from the map.
 - **Modify Selection** — click existing points to remove them, or add new ones.
 
@@ -259,7 +259,7 @@ The interface adapts based on the selected plot type.
 
 ![Meteogram configuration](probabilistic_forecast_tool/notebooks/assets/img/meteogram_config.png)
 
-1. **Model Class**, **Forecast Initialization Date**, and **Forecast run time**. Available model classes:
+1. **Models**, **Forecast Initialization Date**, and **Forecast run time**. Tick one or more model checkboxes (IFS-ENS is ticked by default):
 
    | Model | MARS | Notes |
    |---|---|---|
@@ -267,25 +267,27 @@ The interface adapts based on the selected plot type.
    | **AIFS-ENS** | `ai` / `0001` | deterministic (AIFS-single), control + 50 perturbed members |
    | **AIFS-Single** | `ai` / `0001` | deterministic only |
    | **IFS 4.4km** | `rd` / `iekm` | deterministic only |
-   | **Custom Experiment** | `rd` / user-defined | deterministic, control + 50 perturbed members; set your own `expver` |
+   | **Custom Experiment** | `rd` / user-defined | deterministic, control + 50 perturbed members |
+
+   For Meteogram and Plumes, every ticked model is retrieved and plotted, so models can be compared at the same point. When **Custom Experiment** is ticked, set its **Class** (default `rd`), **Expver**, and whether to **Include Control Forecast (CF)**.
 
 2. **Grid Resolution** (leave empty for reduced Gaussian grid).
-3. **Forecast Steps** (e.g. `0-24`), reviewed in the scrollable "Available Steps" list, with **Select All**/**Deselect All** helpers.
+3. **Forecast Steps**: a range (default `0-240`) or specific steps, plus a **Frequency** (1-hourly, or 3-, 6-, 12- or 24-hourly). With several models, each model uses its own native steps limited to that frequency. Review the steps in the scrollable "Available Steps" list, with **Select All**/**Deselect All** helpers.
 4. **Parameter Selection** from the scrollable list.
 5. **Geographic Area** (North/South/West/East), settable via the interactive map or manual entry.
-6. **Validate Configuration**, then **Retrieve Data**.
+6. **Validate Configuration**, then **Retrieve Data**. Use **Save to File** to write the loaded data as GRIB under `$SCRATCH/evalkit/<meteogram|stamps|cdf>/`, so you can reload it later with *Load Local Files*.
 
 This retrieves both **perturbed forecasts** and the **control forecast** for each selected parameter.
 
 > 📝 Configuration and loaded data are preserved when switching between Meteogram and Plumes, since both use the same input data structure.
 
-**For Stamps:** the same configuration sections apply (Model Class, date/time, grid, steps, parameters, area). Retrieves **control forecast**, **perturbed forecasts** (ensemble members), and the **deterministic forecast**.
+**For Stamps:** the same configuration sections apply (models, date/time, grid, steps and frequency, parameters, area). Stamps uses the **first** ticked model. Retrieves the **control forecast**, the **perturbed forecasts** (ensemble members), and the **deterministic forecast**. Precipitation is kept as the raw cumulative field, so you can choose any accumulation window at plot time.
 
 **For CDF:**
 
 ![CDF configuration](probabilistic_forecast_tool/notebooks/assets/img/cdf_config.png)
 
-1. **Model Class** and **Forecast Analysis Date**.
+1. **Models** and **Forecast Analysis Date**. CDF uses the **first** ticked model; climate data is available for IFS-ENS.
 2. **Days Back** (slider) — how many days back from the analysis date to look.
 3. **Forecast run time** — which initialization times to include (e.g. Both 00Z & 12Z).
 4. **Grid Resolution** and **Parameter Selection**.
@@ -325,10 +327,12 @@ Select **"Yes"** to enable model-observation comparison, then choose:
 
 ![Retrieve observations configuration](probabilistic_forecast_tool/notebooks/assets/img/obs_retrieval_config.png)
 
-1. **Parameter to Retrieve**, **Data Sources** (SYNOP, HDOBS, or both), and **Period** (for period-based parameters like precipitation, wind gust, or temperature extremes).
+1. **Parameters to Retrieve** (2m Temperature, 2m Dewpoint, Total Precipitation, 10m Wind Speed, 10m Wind Gust, Maximum/Minimum Temperature), **Data Sources** (SYNOP, HDOBS, or both), and **Period** (6, 12 or 24 hours, for period-based parameters like precipitation, wind gust, or temperature extremes).
 2. **Retrieval Times (UTC)** are computed automatically from the parameter/period (e.g. instantaneous parameters are retrieved every 3 hours: 0, 3, 6, 9, 12, 15, 18, 21 UTC).
 3. **Start Date**/**End Date** (`DD/MM/YYYY`) and an **Output Directory**.
 4. Click **"Retrieve Observations"**.
+
+Once loaded, observation stations are coloured by their observed value, with a colour bar. Use **◀ Prev** / **Next ▶** to step through the observation times.
 
 ### Step 4: Automatic Visualization Platform
 
@@ -338,7 +342,7 @@ Select **"Yes"** to enable model-observation comparison, then choose:
 
 1. Choose a **Parameter** and preferred **Unit** from the dropdowns.
 2. Click on the map to select **one** analysis point (or enter Lat/Lon manually and click **"+ Add Point"**).
-3. The plot is generated automatically once a point is selected.
+3. The plot is generated automatically once a point is selected. When several models were retrieved, each one is plotted with its own label.
 
 ![Meteogram output](probabilistic_forecast_tool/notebooks/assets/img/meteogram_output.png)
 
@@ -353,7 +357,12 @@ Select **"Yes"** to enable model-observation comparison, then choose:
 
 ![Stamps plotting configuration](probabilistic_forecast_tool/notebooks/assets/img/stamps_plotting_config.png)
 
-Select a **Parameter** and **Forecast Step**; the plot shows a grid of individual ensemble members (MEM 01, MEM 02, ...) plus the control member.
+Select a **Parameter**, **Unit** and **Step**. For precipitation (`tp`, `lsp`, `cp`), also choose:
+
+- **Precip Accumulation**: the window ending at the selected step — 3, 6, 12, 24 (default), 48, 72 or 120 hours. Only steps whose window start is also in the data are offered.
+- **Palette**: Basic (0.5–500 mm), Extended (0.5–100 mm) or High Intensity (10–700 mm).
+
+The plot shows a grid of individual ensemble members (MEM 01, MEM 02, ...) plus the control member.
 
 ![Stamps output](probabilistic_forecast_tool/notebooks/assets/img/stamps_output.png)
 

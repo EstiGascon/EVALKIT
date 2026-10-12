@@ -55,7 +55,7 @@ that all precipitation scripts reuse:
   `/tmp/mars_tmp_$USER` during retrievals.
 
 [`precip_obs.py`](precip_obs.py) provides `_parse_geo_file`, which parses STVL
-`.geo` exports and uses the header date/time as the valid time.
+`.geo` exports and takes each row's own date/time as its valid time.
 
 ### Models
 
