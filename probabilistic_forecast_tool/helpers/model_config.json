@@ -372,4 +372,4 @@
     "description": "Configuration organized by model class (IFS/AIFS) and forecast type with parameter IDs",
     "structure": "model_class -> forecast_type -> specific_configurations"
   }
-}
+}
