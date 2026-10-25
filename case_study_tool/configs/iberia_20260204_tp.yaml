@@ -1,0 +1,22 @@
+# Extreme precipitation in Andalusia (577 mm at Grazalema), 4 Feb 2026.
+name: iberia_20260204
+title: "Iberia, 4 Feb 2026 \u2014 extreme precipitation"
+
+variable: tp
+window:
+  end: "2026-02-05 00"
+  hours: 24
+
+leads: [24, 48]
+models: [ifs, aifs, destine]
+
+domain:
+  extent: [-10.0, 4.5, 35.5, 44.5]
+  zooms:
+    andalusia: [-7.6, -1.5, 35.8, 38.7]
+
+region:
+  name: Iberia
+  countries: [Spain, Portugal]
+
+thresholds: [1, 10, 25, 50, 100]

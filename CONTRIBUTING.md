@@ -56,4 +56,5 @@ Notes:
 
 - Update dependencies using `poetry add` or `poetry add --group dev package-name`.
 - If you change dependencies, run `poetry lock` and commit the updated `poetry.lock` file.
-- Put new one-off analysis or case-study scripts in `analysis/case_studies/`, not directly in `analysis/`. Reusable pipeline modules stay in `analysis/`. Generated data, figures and tables go to `analysis/data/`, `analysis/figures/` and `analysis/results/`.
+- For a new precipitation or 10 m wind case study, add a YAML file to `case_study_tool/configs/` and check it with `run_case.py plan` before `run` (see [case_study_tool/README.md](case_study_tool/README.md)). Its `cache/` and `output/` folders are ignored by git.
+- Put other one-off analysis or case-study scripts in `analysis/case_studies/`, not directly in `analysis/`. Reusable pipeline modules stay in `analysis/`. Generated data, figures and tables go to `analysis/data/`, `analysis/figures/` and `analysis/results/`.

@@ -182,4 +182,6 @@ analysis/figures/
 analysis/results/
 analysis/*.log
 clickable_timeseries/notebooks/retrieved_observations/
+case_study_tool/cache/
+case_study_tool/output/
 ens_probabilistic_analysis/data

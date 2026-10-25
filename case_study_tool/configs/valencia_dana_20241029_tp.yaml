@@ -1,0 +1,27 @@
+# Valencia DANA (cut-off low), 29 Oct 2024: ~770 mm in 24 h at Turís, catastrophic flash floods.
+# The record gauges (Turís, Chiva) are not in SYNOP/HDOBS, and several Spanish SYNOPs only report
+# tp24 at 06 UTC (e.g. station 08281, 207 mm to 30 Oct 06 UTC), so the gauge maximum here is ~140 mm.
+name: valencia_dana_20241029_tp
+title: "Valencia DANA, 29 Oct 2024 — extreme precipitation"
+
+variable: tp
+window:
+  end: "2024-10-30 00"
+  hours: 24
+
+leads: [24, 48, 72]
+models: [ifs, aifs, destine]
+
+domain:
+  extent: [-3.5, 1.5, 37.5, 41.0]
+  zooms:
+    valencia: [-1.6, 0.1, 38.8, 40.0]
+
+region:
+  name: Comunitat Valenciana
+  admin1: {country: Spain, regions: [Valenciana]}
+
+thresholds: [10, 50, 100, 200]
+
+plot:
+  style: gridbox             # native grid cells: shows how each model resolves the core

@@ -1,0 +1,28 @@
+# Catalonia MCS, 3-4 Oct 2026, including a research experiment given explicitly.
+name: catalonia_20261004_tp
+title: "Catalonia MCS, 3-4 Oct 2026"
+
+variable: tp
+window:
+  end: "2026-10-04 12"
+  hours: 24
+
+leads: [36, 60]
+models:
+  - ifs
+  - aifs
+  - destine
+  - label: "Pilot DT (j5j2)"   # any MARS experiment: class + expver (+ stream/type/cycles/steps)
+    class: rd
+    expver: j5j2
+    cycles: [0]
+    step_rules: [[120, 1]]
+
+domain:
+  extent: [-0.5, 4.5, 39.5, 43.5]
+
+region:
+  name: Catalonia
+  admin1: {country: Spain, regions: [Cataluña]}
+
+thresholds: [10, 25, 50, 100]

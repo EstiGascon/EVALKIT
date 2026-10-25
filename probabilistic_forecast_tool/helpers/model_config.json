@@ -359,12 +359,6 @@
       "allowed_forecast_types": ["deterministic", "probabilistic"],
       "default_model": "ifs"
     },
-    "dynamic_maps": {
-      "description": "Spatial analysis with dynamic maps",
-      "allowed_models": ["ifs", "aifs"],
-      "allowed_forecast_types": ["deterministic"],
-      "default_model": "ifs"
-    },
     "clickable_timeseries": {
       "description": "Time series analysis for single locations",
       "allowed_models": ["ifs", "aifs"],

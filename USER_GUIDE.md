@@ -1,23 +1,23 @@
 # EvalKit User Guide
 
-**Model Error Detective** (EvalKit) is an open-source toolkit for analyzing and visualizing meteorological model outputs. It provides three complementary tools to help researchers and forecasters explore, compare, and diagnose model errors:
+**Model Error Detective** (EvalKit) is an open-source toolkit for analyzing and visualizing meteorological model outputs. It provides two notebook tools and a command-line case-study tool to help researchers and forecasters explore, compare, and diagnose model errors:
 
 | Tool | Purpose | Notebook |
 |---|---|---|
-| 🗺️ **Dynamic Maps** | Spatial visualization of surface variables (dynamic, static, and multi-step maps) | [dynamic_maps/notebooks/dynamic_map.ipynb](dynamic_maps/notebooks/dynamic_map.ipynb) |
 | ⏱️ **Clickable Timeseries** | Interactive point-and-click time-series comparison across models and observations | [clickable_timeseries/notebooks/timeseries_analysis.ipynb](clickable_timeseries/notebooks/timeseries_analysis.ipynb) |
 | 📊 **Probabilistic Forecast Tool** | Ensemble forecast visualization: meteograms, plumes, stamps, and CDFs | [probabilistic_forecast_tool/notebooks/probabilistic_forecast_tool.ipynb](probabilistic_forecast_tool/notebooks/probabilistic_forecast_tool.ipynb) |
+| 🧪 **Case Study Tool** | Model-vs-observation evaluation of one event, described in a YAML file (command line) | [case_study_tool/run_case.py](case_study_tool/run_case.py) |
 
-This guide brings together the usage instructions from all three notebooks, plus setup and customization information. For a quick description of each tool, see the [README](README.md).
+This guide brings together the usage instructions from both notebooks and the case-study tool, plus setup and customization information. For a quick description of each tool, see the [README](README.md).
 
 Alongside the notebooks, the [`analysis/`](analysis/) folder contains command-line verification pipelines and case-study scripts that produce static figures and tables. See [Analysis Scripts and Case Studies](#-analysis-scripts-and-case-studies).
 
 ## Table of Contents
 
 1. [Getting Started](#getting-started)
-2. [Dynamic Maps](#-dynamic-maps)
-3. [Clickable Timeseries](#-clickable-timeseries)
-4. [Probabilistic Forecast Tool](#-probabilistic-forecast-tool)
+2. [Clickable Timeseries](#-clickable-timeseries)
+3. [Probabilistic Forecast Tool](#-probabilistic-forecast-tool)
+4. [Case Study Tool](#-case-study-tool)
 5. [Analysis Scripts and Case Studies](#-analysis-scripts-and-case-studies)
 6. [Customization and Extensibility](#customization-and-extensibility)
 7. [Tips for Best Results](#tips-for-best-results)
@@ -33,97 +33,10 @@ Full environment setup steps (WSL, Poetry, dependencies) are documented in [GETT
 2. Activate the environment: `eval $(poetry env activate)`.
 3. Launch Jupyter and open the notebook for the tool you want to use:
    - [clickable_timeseries/notebooks/timeseries_analysis.ipynb](clickable_timeseries/notebooks/timeseries_analysis.ipynb)
-   - [dynamic_maps/notebooks/dynamic_map.ipynb](dynamic_maps/notebooks/dynamic_map.ipynb)
    - [probabilistic_forecast_tool/notebooks/probabilistic_forecast_tool.ipynb](probabilistic_forecast_tool/notebooks/probabilistic_forecast_tool.ipynb)
 4. Run the cells in order. The last cell in each notebook launches the interactive interface described below.
 
----
-
-## 🗺️ Dynamic Maps
-
-**EvalKit — Interactive Surface Variables Visualization Tool**
-
-### Overview
-
-A comprehensive interface for downloading, processing, and visualizing surface weather variables with integrated mapping. The application consists of three main collapsible panels:
-
-1. **Configuration Panel** — set up data sources and analysis parameters
-2. **Surface Variables Calculator** — compute derived meteorological variables
-3. **Interactive Plotting** — create and customize visualizations
-
-### Step 1: Configure Your Data Source
-
-The Configuration Panel offers two data source options.
-
-**Option A: Download from MARS Archive**
-
-1. Select the **"Download from MARS Archive"** radio button.
-2. **Parameter Selection**: select meteorological parameters from the scrollable list (e.g. 2m Temperature, Wind components, Precipitation). Multiple parameters can be selected.
-3. **Model & Time Settings**: choose a **Model** (**IFS Operational**, `class=od`, or **AIFS Control**, `class=ai`), enter a **Date** (`YYYY-MM-DD`, e.g. `2026-03-29`), and pick a **Time** (e.g. `00:00:00`).
-4. **Forecast Steps**: enter a **Start Step** and **End Step** (hours), click **"Update Steps"**, then use **"Select All Steps"** / **"Deselect All"** as needed. Review the generated steps in the scrollable list.
-5. **Geographic Area**: enter **North**/**South**/**West**/**East** coordinates, or draw a rectangle directly on the interactive map — the coordinate boxes populate automatically.
-6. **Grid Resolution**: enter a value (e.g. `0.25`) for a regular grid, or leave empty to use the native reduced Gaussian grid. Use **"Reset Grid"** / **"Clear Grid"** as needed.
-7. **Action Buttons**: **Preview Settings** to review before downloading, **Retrieve Data** to start the download, **Reset All** to clear everything.
-
-![Data acquisition panel](dynamic_maps/notebooks/assets/img/data_acq.png)
-
-**Option B: Load Local File**
-
-1. Select **"Load Local File"**.
-2. Enter a file path directly (e.g. `path/to/yourdata.grib`) or click **"Browse Files"**, then click **"Load File"**.
-3. Use the interactive map (zoom controls, drawing tool) to inspect the geographic coverage of the loaded file.
-
-![Local file loading panel](dynamic_maps/notebooks/assets/img/local_file_section.png)
-
-### Step 2: Calculate Derived Variables (Optional)
-
-1. Expand the **"Surface Variables Calculator"** panel.
-2. Choose a calculation type from the dropdown (Wind Speed, Accumulated Precipitation, Extremes). The interface tells you whether the calculation is possible given the data you've loaded.
-3. Click **"Calculate"** — the computed variable is added to your available parameters.
-
-![Surface variables calculator](dynamic_maps/notebooks/assets/img/calculator_sv.png)
-
-**Available calculation methods:**
-
-| Calculation | Input(s) | Output |
-|---|---|---|
-| **Wind Speed** | 10m U (`u10`) and V (`v10`) components | Instantaneous wind speed magnitude at each timestep |
-| **Accumulated Precipitation** | Total Precipitation (`tp`) | Total precipitation accumulated between the first and last forecast step |
-| **Max/Min Values** | Any time-varying variable (temperature, wind gust, etc.) | Maximum or minimum value at each grid point across all timesteps |
-
-### Step 3: Create Visualizations
-
-![Plotting configuration panel](dynamic_maps/notebooks/assets/img/plotting_configuration.png)
-
-1. Click **"Refresh Data"** to make sure the latest data is loaded.
-2. **Parameter Selection**: choose from both original and calculated variables.
-3. **Plot Configuration**: choose a display **Unit** (e.g. Millimeters) and **Color Palette** (Basic / Extended / High Intensity).
-4. **Step Selection**: pick which forecast time step to visualize.
-5. **Plot Type Selection**: choose a visualization type and click **"Generate Plot"**. Progress is shown in the info box below.
-
-**Available visualization options:**
-
-- **Dynamic Map** — interactive visualization for a specific time step.
-
-  ![Dynamic map](dynamic_maps/notebooks/assets/img/dynamic_map.png)
-
-- **Static Map** — a fixed map for a specific time step, generated via `earthkit` (recommended for presentations/reports).
-
-  ![Static map](dynamic_maps/notebooks/assets/img/static_map.png)
-
-- **Multi-Step Maps** — interactive, animated visualization of temporal evolution across several forecast steps.
-
-  ![Multi-step map](dynamic_maps/notebooks/assets/img/temporal_map.png)
-
-**Availability by variable type:**
-
-| Variable Type | Static Map | Dynamic Map | Multi-Step Map |
-|---|---|---|---|
-| Retrieved | ✅ | ✅ | ✅ |
-| Calculated (Wind Speed) | ❌ | ✅ | ✅ |
-| Calculated (other) | ❌ | ✅ | ❌ |
-
-*Wind speed is the only calculated variable that supports multi-step maps.*
+The [Case Study Tool](#-case-study-tool) and the [analysis scripts](#-analysis-scripts-and-case-studies) run from the command line on ECMWF systems. They need MARS access, not the Poetry environment.
 
 ---
 
@@ -378,6 +291,65 @@ Select a **Parameter**, then click on the map (or enter Lat/Lon) to select one a
 
 ---
 
+## 🧪 Case Study Tool
+
+**EvalKit — model vs. observations case-study evaluation** (`case_study_tool/`)
+
+Describe a case in one YAML file. The tool retrieves the forecasts from MARS and the SYNOP/HDOBS observations from VINO, then writes the figures and score tables. It works for any area, date, model or experiment.
+
+### Quick start
+
+```bash
+PY=/usr/local/apps/python3/3.13.13-01/bin/python3       # needs earthkit-data, cartopy, shapely, pyyaml
+$PY case_study_tool/run_case.py template -o my_case.yaml  # commented template
+$PY case_study_tool/run_case.py plan my_case.yaml         # dry run: runs, steps, observations, checks
+$PY case_study_tool/run_case.py run  my_case.yaml         # retrieve, verify, plot
+$PY case_study_tool/run_case.py models                    # list model presets
+```
+
+Ready-made examples are in [`case_study_tool/configs/`](case_study_tool/configs/): Iberia (Feb 2026), Tuscany (Oct 2024), the Valencia DANA (Oct 2024), Catalonia (Oct 2026), the California atmospheric river (precipitation) and the Pacific NW bomb cyclone (maximum wind). The full reference, including every option, is in [`case_study_tool/README.md`](case_study_tool/README.md).
+
+Run `plan` before `run`. It needs no retrieval and warns about every model and lead time that cannot be retrieved (no such cycle, step not archived, lead shorter than the window) and about region names that match nothing. Unknown or misspelt keys in the YAML file are rejected.
+
+### What you configure
+
+| Key | Meaning |
+|---|---|
+| `variable` | `tp` (precipitation) or `ws10` (10 m wind speed) |
+| `window.end`, `window.hours` | End and length of the verification window (UTC). `hours: 0` = instantaneous |
+| `window.statistic` | `sum` for `tp`; `instant`, `max` or `mean` for `ws10` |
+| `leads` | Lead times to the **end** of the window. The model run is `end − lead`, and steps are derived automatically |
+| `models` | Presets `ifs`, `aifs`, `destine` (`iekm`, falling back to `i4ql`), `pilot_dt` (`j5j2`). Use `{preset: destine, expver: xxxx}` for another experiment (labelled "DestinE xxxx"), or give any MARS experiment with `class`, `expver` and optionally `label`, `stream`, `type`, `cycles`, `step_rules`. Each model needs a unique label |
+| `domain.extent`, `domain.zooms` | Main map `[W, E, S, N]` plus optional zoom maps. Each gets its own figures |
+| `region` | Optional outline for statistics, drawn on the maps: `countries`, `admin1` (e.g. `{country: Italy, regions: [Toscana]}` or `{country: Spain, regions: [Valenciana]}`) or `box`. Without it, statistics cover the whole main domain, sea included |
+| `observations` | `sources` (SYNOP/HDOBS), `min_coverage` (share of reports a station needs), `vino_path` |
+| `thresholds` | Thresholds for the categorical scores |
+| `plot` | `style` (`contour` or `gridbox`), `levels` (`null` = automatic colour scale), `orography` (also limits the region max/mean to model land points) |
+| `output_dir`, `cache_dir` | Optional. Relative paths resolve from the repository root |
+
+### How observations are matched
+
+- **Precipitation over N×24 h:** daily `tp24` totals ending at the window's end hour are summed per station.
+- **6 or 12 h precipitation:** the `tp` report for that period is used directly.
+- **Wind:** `10ff` at the valid time (`instant`), or the maximum or mean of the 3-hourly reports over the window. Model wind statistics use 3-hourly outputs (6-hourly for AIFS).
+- **Gaps:** stations below `min_coverage` are dropped. Duplicate SYNOP/HDOBS reports of the same gauge are merged.
+
+### Outputs (`case_study_tool/output/<name>/`)
+
+- **Panels:** `panel.png` (and `panel_<zoom>.png`). Rows are lead times; columns are the observations followed by each model. Each model title gives the run, the steps, the maximum inside the region (marked × on the map), and the station bias, RMSE and correlation.
+- **Maps:** `observations.png` (gauges only) and `orography.png` (each model's terrain, sea masked with its own land–sea mask).
+- **Scores:**
+  - `scores.png`: bias, RMSE and correlation bars, plus ETS against threshold.
+  - `scores.csv`: region max/mean and station scores per model and lead.
+  - `categorical_scores.csv`: hits, misses, false alarms, POD, FAR, frequency bias and ETS per threshold.
+- **Data:** `observations.csv`, the aggregated value per station.
+
+Retrievals run in parallel (`--workers`, default 6) and are cached in `case_study_tool/cache/`, so re-runs only redraw. Use `--force` to re-retrieve, or `--no-obs` to skip the observations.
+
+> ⚠️ Outputs that include HDOBS are for ECMWF internal use only.
+
+---
+
 ## 🔬 Analysis Scripts and Case Studies
 
 The [`analysis/`](analysis/) folder holds command-line scripts for forecast verification and case studies. They run on an ECMWF Python with `earthkit-data`, `cartopy` and `shapely` (e.g. `/usr/local/apps/python3/3.13.13-01/bin/python3`), and need MARS access and `vino_getgeo` for observations. Retrievals are cached under `analysis/data/`. Figures go to `analysis/figures/` and tables to `analysis/results/`.
@@ -392,6 +364,9 @@ The [`analysis/`](analysis/) folder holds command-line scripts for forecast veri
 | `analysis/case_studies/catalonia_precip.py` | Catalonia MCS, 24 h precipitation (03 Oct 12 UTC → 04 Oct 12 UTC 2026) at T+60 h and T+36 h |
 | `analysis/case_studies/crete_precip.py` | Crete, 5-day (T+0–120 h) precipitation, plotted per native grid box, plus observed 5-day SYNOP + HDOBS station totals |
 | `analysis/case_studies/crete_orography.py` | Crete, model orography with 10 m wind barbs at T+24 h |
+| `analysis/case_studies/iberia_precip_20260204.py` | Iberia, 24 h precipitation on 4 Feb 2026 (577 mm at Grazalema) at T+24 h and T+48 h, with an Andalusia zoom |
+| `analysis/case_studies/toscana_precip.py` | Tuscany, 24 h precipitation on 18 Oct 2024 at T+24 h and T+48 h, per native grid box |
+| `analysis/case_studies/california_ar_2024.py` | California atmospheric river / Pacific NW bomb cyclone, Nov 2024: 4-day precipitation and 48 h maximum 10 m wind |
 
 The case studies compare **IFS-control** (`od/0001`), **AIFS-single** (`ai/0001`), **DestinE** (`rd/iekm`) and the **Pilot DT** (`rd/j5j2`) at each model's native resolution. Lead times always refer to the **end** of the accumulation window. Example:
 
@@ -400,7 +375,7 @@ python analysis/case_studies/crete_precip.py          # uses cached data if pres
 python analysis/case_studies/crete_precip.py --force  # re-retrieve from MARS / STVL
 ```
 
-New one-off case studies belong in `analysis/case_studies/`. See [analysis/README.md](analysis/README.md) for each script's details, outputs and conventions.
+For a new precipitation or 10 m wind case, prefer the [Case Study Tool](#-case-study-tool): it only needs a YAML file. Scripts in `analysis/case_studies/` are for analyses the tool does not cover (e.g. wind barbs or custom diagnostics). See [analysis/README.md](analysis/README.md) for each script's details, outputs and conventions.
 
 > ⚠️ HDOBS observations are for ECMWF internal use only. Do not distribute figures or tables derived from them outside ECMWF.
 
@@ -408,16 +383,16 @@ New one-off case studies belong in `analysis/case_studies/`. See [analysis/READM
 
 ## Customization and Extensibility
 
-All three tools are designed to be **scalable and customizable** — you can extend them to support additional weather models and parameters by editing their configuration files. Each tool has its own copy of these files:
+Both notebook tools are designed to be **scalable and customizable** — you can extend them to support additional weather models and parameters by editing their configuration files. Each tool has its own copy of these files:
 
 | Tool | Config file | Styling file |
 |---|---|---|
-| Dynamic Maps | `dynamic_maps/helpers/config.json` | `dynamic_maps/helpers/styling_config.py` |
 | Clickable Timeseries | `clickable_timeseries/helpers/config.json` | `clickable_timeseries/helpers/plotting/styling_config.py` |
 | Probabilistic Forecast Tool | `probabilistic_forecast_tool/helpers/model_config.json` | `probabilistic_forecast_tool/helpers/styling_config.py` |
 | Analysis pipelines | `analysis/config.py` (wind), `analysis/precip_config.py` (Baltic precip) | per-script colour levels |
+| Case Study Tool | one YAML file per case (`case_study_tool/configs/`); model presets in `case_study_tool/casetool/models.py` | `case_study_tool/casetool/plotting.py` (automatic, or `plot.levels` in the YAML) |
 
-Case-study scripts in `analysis/case_studies/` keep their settings (dates, area, models, colour levels) as constants at the top of each file.
+In the Case Study Tool, a new experiment needs no code change. Add it to `models` in the case YAML, with its `class` and `expver`. Case-study scripts in `analysis/case_studies/` keep their settings (dates, area, models, colour levels) as constants at the top of each file.
 
 ### Adding a New Model
 

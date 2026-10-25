@@ -1,0 +1,20 @@
+# Heavy precipitation in Tuscany and central Italy, 18 Oct 2024.
+name: toscana_20241018
+title: "Tuscany, 18 Oct 2024 \u2014 heavy precipitation"
+
+variable: tp
+window:
+  end: "2024-10-19 00"
+  hours: 24
+
+leads: [24, 48]
+models: [ifs, aifs, destine]
+
+domain:
+  extent: [9.0, 15.5, 39.8, 45.0]
+
+region:
+  name: Tuscany
+  admin1: {country: Italy, regions: [Toscana]}
+
+thresholds: [1, 10, 25, 50]

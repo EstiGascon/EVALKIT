@@ -1,0 +1,18 @@
+# Atmospheric river (CW3E AR3-4) stalled over Northern California, 20-24 Nov 2024.
+name: california_ar_20241124_tp
+title: "N California / Pacific NW atmospheric river, Nov 2024"
+
+variable: tp
+window:
+  end: "2024-11-24 00"
+  hours: 96              # 4-day total; gauges summed from daily totals
+
+leads: [96, 120]
+models: [ifs, aifs, destine]
+
+domain:
+  extent: [-128.0, -116.0, 36.5, 49.5]
+  zooms:
+    north_california: [-125.0, -119.5, 37.0, 42.5]
+
+thresholds: [10, 50, 100, 150]

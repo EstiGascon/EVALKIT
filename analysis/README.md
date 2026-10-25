@@ -10,7 +10,11 @@ and write static figures and tables.
 | [`europe_map.py`](europe_map.py) | Europe-wide 10 m wind-speed bias maps, same period |
 | [`drilldown.py`](drilldown.py) | Drill-down into the 15 Aug 2026 wind event |
 | [`precip_run.py`](precip_run.py) | Baltic 24 h precipitation misplacement study |
-| [`case_studies/`](case_studies/) | One-off case-study scripts (Alps, Catalonia, Crete) |
+| [`case_studies/`](case_studies/) | One-off case-study scripts (Alps, Catalonia, Crete, Iberia, Tuscany, California) |
+
+> For a new precipitation or 10 m wind case, the configurable
+> [Case Study Tool](../case_study_tool/README.md) is usually quicker: it only
+> needs a YAML file, and it covers any area, date and MARS experiment.
 
 ## Requirements
 
@@ -155,6 +159,9 @@ interpolation.
 | [`catalonia_precip.py`](case_studies/catalonia_precip.py) | Catalonia MCS. 24 h precipitation from 03 Oct 12 UTC to 04 Oct 12 UTC 2026, at T+60 h (02 Oct 00 UTC run, steps 36–60) and T+36 h (03 Oct 00 UTC run, steps 12–36) | IFS-control, AIFS-single, DestinE (iekm), Pilot DT (j5j2) | `figures/catalonia_precip_2026100412.png`, `results/catalonia_precip_2026100412.csv` |
 | [`crete_precip.py`](case_studies/crete_precip.py) | Crete extreme precipitation. 5-day accumulation T+0–120 h of the 30 Sep 2026 00 UTC run, plus the observed 5-day totals | as above | `figures/crete_precip_2026093000_0_120.png`, `figures/crete_precip_obs_2026093000_2026100500.png`, matching CSVs in `results/` |
 | [`crete_orography.py`](case_studies/crete_orography.py) | Crete: model orography with 10 m wind barbs at T+24 h, 30 Sep 2026 00 UTC run | as above | `figures/crete_orog_wind_2026093000_T24.png` |
+| [`iberia_precip_20260204.py`](case_studies/iberia_precip_20260204.py) | Iberia, 24 h precipitation 4 Feb 00 UTC → 5 Feb 00 UTC 2026 (577 mm at Grazalema), at T+24 h and T+48 h, for Iberia and an Andalusia zoom, with SYNOP + HDOBS gauges and model orography | IFS operational, AIFS-single, DestinE (iekm, falling back to i4ql) | `figures/iberia_precip_<domain>_2026020500.png`, `figures/iberia_precip_obs_<domain>_2026020500.png`, `figures/iberia_orography_<domain>.png`, `results/iberia_precip_2026020500.csv` |
+| [`toscana_precip.py`](case_studies/toscana_precip.py) | Tuscany, 24 h precipitation 18 Oct 00 UTC → 19 Oct 00 UTC 2024, at T+24 h and T+48 h, per native grid box, with gauges | as above | `figures/toscana_precip_2024101900.png`, `figures/toscana_precip_obs_2024101900.png`, `results/toscana_precip_2024101900.csv` |
+| [`california_ar_2024.py`](case_studies/california_ar_2024.py) | N California / Pacific NW atmospheric river, Nov 2024: 4-day precipitation (20 → 24 Nov 00 UTC) at T+96 h and T+120 h, and maximum 10 m wind (19 Nov 12 UTC → 21 Nov 12 UTC) at T+60 h and T+84 h | as above | `figures/ar2024_tp_*.png`, `figures/ar2024_ws10max_*.png` (plus `_obs_` station maps), matching CSVs in `results/` |
 
 ### Catalonia (`catalonia_precip.py`)
 
@@ -196,6 +203,10 @@ interpolation.
     across models.
 
 ### Adding a new case study
+
+For a precipitation or 10 m wind case, first check whether the
+[Case Study Tool](../case_study_tool/README.md) covers it: it only needs a YAML
+file. These three cases are also available there as `configs/*.yaml`.
 
 Put new one-off scripts in `case_studies/`, not directly in `analysis/`. Base
 them on an existing script:

@@ -1,0 +1,20 @@
+# Bomb cyclone landfall, Pacific Northwest: maximum 10 m wind 19 Nov 12 UTC - 21 Nov 12 UTC 2024.
+name: california_ar_20241121_ws10max
+title: "Pacific NW bomb cyclone, Nov 2024 \u2014 maximum 10 m wind"
+
+variable: ws10
+window:
+  end: "2024-11-21 12"
+  hours: 48
+  statistic: max         # model: max over 3-hourly outputs; stations: max of 3-hourly reports
+
+leads: [60, 84]
+models: [ifs, aifs, destine]
+
+domain:
+  extent: [-128.0, -116.0, 36.5, 49.5]
+
+observations:
+  min_coverage: 0.8
+
+thresholds: [10, 15, 20]
